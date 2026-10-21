@@ -516,7 +516,12 @@ export function emitirNota(entrada: Estado, facturaId: string, tipo: 'NCRE' | 'N
   const estado = clonar(entrada)
   const origen = estado.facturas.find((f) => f.id === facturaId)
   if (!origen || origen.tipo !== 'FACT' || origen.estado !== 'cerrada') {
-    return { ok: false, error: 'La nota sale de una factura cerrada.' }
+    return { ok: false, error: 'La nota sale de una factura de venta cerrada.' }
+  }
+  const cliente = estado.socios.find((s) => s.id === origen.socioId)
+  if (!origen.ordenVentaId || !cliente?.roles.includes('cliente')) {
+    const nombre = tipo === 'NCRE' ? 'crédito' : 'débito'
+    return { ok: false, error: `La nota de ${nombre} solo aplica a una factura emitida a un cliente. No se emite sobre una factura de proveedor.` }
   }
   if (origen.ajustada) return { ok: false, error: 'Esa factura ya fue ajustada.' }
   if (tipo === 'NCRE' && origen.cobros.length > 0) {
@@ -537,7 +542,7 @@ export function emitirNota(entrada: Estado, facturaId: string, tipo: 'NCRE' | 'N
     fecha: fechaGT(),
     estado: 'abierta',
     lineas: structuredClone(origen.lineas),
-    motivo: motivo.trim() || (tipo === 'NCRE' ? 'Ajuste a favor del cliente' : 'Ajuste a cargo del cliente'),
+    motivo: motivo.trim() || (tipo === 'NCRE' ? 'Anulación de la factura' : 'Ajuste a cargo del cliente'),
     acuse: null,
     dte: null,
     cobros: [],
@@ -707,6 +712,9 @@ export function registrarCobro(entrada: Estado, facturaId: string, monto: number
   const factura = estado.facturas.find((f) => f.id === facturaId)
   if (!factura || (factura.tipo !== 'FACT' && factura.tipo !== 'NDEB') || factura.estado !== 'cerrada' || factura.ajustada) {
     return { ok: false, error: 'Solo se cobra una factura o nota de débito cerrada y vigente.' }
+  }
+  if (estado.facturas.some((f) => f.facturaOrigenId === factura.id && f.tipo === 'NCRE' && f.estado !== 'cancelada')) {
+    return { ok: false, error: 'Hay una nota de crédito sobre esa factura. Certificala o cancelala antes de cobrar.' }
   }
   const saldo = redondear(totalesVenta(factura.lineas).total - factura.cobros.reduce((s, c) => s + c.monto, 0))
   if (monto <= 0 || monto - saldo > 0.001) return { ok: false, error: `El cobro no puede pasar el saldo de Q${saldo.toFixed(2)}.` }

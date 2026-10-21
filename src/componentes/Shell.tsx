@@ -8,7 +8,7 @@ import { Tour, type PasoTour } from './Tour'
 const PASOS: PasoTour[] = [
   { selector: '[data-tour="marca"]', titulo: 'La operación', texto: 'Este es el nombre comercial. La razón social, el NIT y el teléfono se editan en Empresa y también salen en la certificación.' },
   { selector: '[data-tour="menu"]', titulo: 'Menú', texto: 'Cada opción depende del rol. El punto de venta cobra en mostrador. Facturas maneja abierta, cerrada y cancelada.' },
-  { selector: '[data-tour="nav-facturas"]', titulo: 'Facturas', texto: 'Abierta cuando se crea. Cerrada al certificar. Si sigue abierta, se cancela aquí. Si ya está cerrada, se anula con el certificador o con una nota de crédito. La nota de débito aumenta el cargo.' },
+  { selector: '[data-tour="nav-facturas"]', titulo: 'Facturas', texto: 'Abierta cuando se crea. Cerrada al certificar. Si sigue abierta, se cancela aquí. Si ya está cerrada, la anula el certificador o una nota de crédito. La nota de débito solo aumenta lo que debe el cliente.' },
   { selector: '[data-tour="nav-contabilidad"]', titulo: 'Libros', texto: 'El diario, el mayor y los estados salen de los mismos asientos. En cada grilla podés elegir columnas, orden y cuántas filas ver.' },
   { selector: '[data-tour="sucursal"]', titulo: 'Sucursal', texto: 'Si tu rol ve toda la empresa, este filtro cambia los documentos de la pantalla. Cada sucursal tiene sus series.' },
   { selector: '[data-tour="guia"]', titulo: 'Esta guía', texto: 'Podés volver a abrirla cuando quieras. Es una aplicación instalable: en el teléfono, desde el navegador, se agrega a la pantalla de inicio.' },

@@ -24,7 +24,7 @@ export function Compras() {
   }
 
   return (
-    <Pagina titulo="Órdenes de compra" detalle="El costo va sin IVA. Al recibir entra el inventario, el IVA crédito y la cuenta por pagar." accion={puede('compras.editar') && <Boton onClick={() => setAbierto(true)}>Nueva compra</Boton>}>
+    <Pagina titulo="Órdenes de compra" detalle="El costo va sin IVA. Al recibir entra el inventario, el IVA crédito y la cuenta por pagar. La factura del proveedor no se ajusta con una nota de débito: ese documento solo se emite a un cliente." accion={puede('compras.editar') && <Boton onClick={() => setAbierto(true)}>Nueva compra</Boton>}>
       <Tabla
         columnas={['Documento', 'Fecha', 'Proveedor', 'Estado', 'Total', '']}
         vacio="No hay compras en esta sucursal."

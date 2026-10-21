@@ -41,11 +41,11 @@ export function Facturas() {
 
   function pedir(id: string, modo: 'credito' | 'debito' | 'anular') {
     setAjuste({ id, modo })
-    setMotivo(modo === 'debito' ? 'Ajuste a cargo del cliente' : modo === 'credito' ? 'Ajuste a favor del cliente' : 'Anulación ante el certificador')
+    setMotivo(modo === 'debito' ? 'Ajuste a cargo del cliente' : modo === 'credito' ? 'Anulación de la factura' : 'Anulación ante el certificador')
   }
 
   return (
-    <Pagina titulo="Facturas" detalle="Abierta al crearla. Cerrada cuando el certificador acepta. Cancelada si se anula antes de certificar, o con el servicio de anulación si ya estaba cerrada. La nota de crédito y la de débito son documentos aparte.">
+    <Pagina titulo="Facturas" detalle="Abierta al crearla. Cerrada cuando el certificador acepta. Si sigue abierta, se cancela aquí. Si ya está cerrada, la anula el servicio del certificador o una nota de crédito. La nota de débito no anula: aumenta lo que el cliente debe, y no aplica a una factura de proveedor.">
       <Tabla
         id="facturas"
         columnas={[
@@ -61,8 +61,11 @@ export function Facturas() {
         filas={facturas.map((factura) => {
           const serie = estado.series.find((s) => s.id === factura.serieId)
           const numero = factura.numero ? folio(serie?.prefijo ?? 'FAC', factura.numero) : 'Sin número'
+          const cliente = estado.socios.find((s) => s.id === factura.socioId)
           const tieneNota = estado.facturas.some((f) => f.facturaOrigenId === factura.id && f.estado !== 'cancelada')
-          const puedeAjustar = puede('facturas.emitir') && factura.tipo === 'FACT' && factura.estado === 'cerrada' && !factura.ajustada && !tieneNota
+          const notaCreditoPendiente = estado.facturas.some((f) => f.facturaOrigenId === factura.id && f.tipo === 'NCRE' && f.estado !== 'cancelada')
+          const facturaDeCliente = factura.tipo === 'FACT' && Boolean(factura.ordenVentaId) && Boolean(cliente?.roles.includes('cliente'))
+          const puedeAjustar = puede('facturas.emitir') && facturaDeCliente && factura.estado === 'cerrada' && !factura.ajustada && !tieneNota
           const sinCobros = factura.cobros.length === 0
           return {
             id: factura.id,
@@ -80,10 +83,10 @@ export function Facturas() {
                 <Boton variante="secundario" onClick={() => setVista(factura.id)}>Ver</Boton>
                 <Boton variante="secundario" onClick={() => descargar(factura.id)}>XML</Boton>
                 {puede('facturas.emitir') && factura.estado === 'abierta' && <Boton disabled={certificando === factura.id} onClick={() => certificar(factura.id)}>{certificando === factura.id ? 'Certificando…' : 'Certificar'}</Boton>}
-                {puede('facturas.cobrar') && saldoFactura(factura) > 0 && <Boton variante="secundario" onClick={() => { setCobro(factura.id); setMonto(saldoFactura(factura)); setReferencia('') }}>Cobrar</Boton>}
+                {puede('facturas.cobrar') && saldoFactura(factura) > 0 && !notaCreditoPendiente && <Boton variante="secundario" onClick={() => { setCobro(factura.id); setMonto(saldoFactura(factura)); setReferencia('') }}>Cobrar</Boton>}
                 {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'anular')}>Anular</Boton>}
                 {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'credito')}>Nota de crédito</Boton>}
-                {puedeAjustar && <Boton variante="secundario" onClick={() => pedir(factura.id, 'debito')}>Nota de débito</Boton>}
+                {puedeAjustar && <Boton variante="secundario" onClick={() => pedir(factura.id, 'debito')}>Débito al cliente</Boton>}
                 {puede('facturas.emitir') && factura.estado === 'abierta' && <Boton variante="peligro" onClick={() => ejecutar((e) => cancelarDocumento(e, factura.id))}>Cancelar</Boton>}
               </span>,
             ],
@@ -111,7 +114,7 @@ export function Facturas() {
         </form>
       </Modal>
       <Modal
-        titulo={ajuste?.modo === 'debito' ? 'Nota de débito' : ajuste?.modo === 'credito' ? 'Nota de crédito' : 'Anular con el certificador'}
+        titulo={ajuste?.modo === 'debito' ? 'Nota de débito al cliente' : ajuste?.modo === 'credito' ? 'Nota de crédito' : 'Anular con el certificador'}
         abierto={Boolean(ajuste)}
         onCerrar={() => setAjuste(null)}
         ancho="max-w-md"
@@ -127,8 +130,10 @@ export function Facturas() {
         }}>
           <p className="text-sm text-slate-600">
             {ajuste?.modo === 'anular'
-              ? 'La factura ya está cerrada. Este paso simula el servicio de anulación del certificador y revierte el asiento. La nota de crédito es el otro camino: queda abierta hasta que la certifiques.'
-              : 'La nota queda abierta. El correlativo y el asiento se registran cuando la certifiques.'}
+              ? 'La factura ya está cerrada. Este paso llama al servicio de anulación del certificador, revierte el asiento y la deja cancelada. No crea una nota de crédito.'
+              : ajuste?.modo === 'debito'
+                ? 'La emitimos nosotros y aumenta lo que el cliente nos debe. No anula la factura y no sirve para una factura de proveedor.'
+                : 'Esta nota anula el efecto de la factura del cliente. Queda abierta hasta certificarla: ahí se reversa venta, IVA y, si la factura movió inventario, el producto regresa. La factura original queda ajustada y con saldo cero.'}
           </p>
           <Campo etiqueta="Motivo"><Texto value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Campo>
           <Boton type="submit">{ajuste?.modo === 'anular' ? 'Anular documento' : 'Crear nota'}</Boton>
