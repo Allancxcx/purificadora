@@ -61,6 +61,13 @@ function migrar(estado: Estado): Estado {
     empresa,
     series,
     facturas: estado.facturas.map((factura) => ({ ...factura, estado: estadoDocumento(String(factura.estado)) })),
+    ordenesVenta: estado.ordenesVenta.map((orden) => ({
+      ...orden,
+      lineas: orden.lineas.map((linea) => ({
+        ...linea,
+        despachada: linea.despachada ?? (orden.estado === 'en_ruta' || orden.estado === 'entregada' ? linea.cantidad : 0),
+      })),
+    })),
     roles: estado.roles.map((rol) => {
       if (rol.id === 'rol-admin') return { ...rol, opciones: TODAS_LAS_OPCIONES }
       const extra = (COMPLEMENTO_ROL[rol.id] ?? []).filter((codigo) => !rol.opciones.includes(codigo))

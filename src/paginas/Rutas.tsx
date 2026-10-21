@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useErp } from '../datos/store'
 import { crearRuta, iniciarRuta } from '../datos/motor'
-import { folio, kilometrosRuta, ordenDespachable, posicionRepartidor } from '../datos/consultas'
+import { folio, kilometrosRuta, ordenDespachable, pendienteLinea, posicionRepartidor } from '../datos/consultas'
 import { distanciaKm } from '../dominio/geo'
 import { fechaGT } from '../dominio/formato'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta, Texto } from '../componentes/ui'
@@ -27,6 +27,7 @@ export function Rutas() {
   const [repartidorId, setRepartidorId] = useState('')
   const [vehiculo, setVehiculo] = useState('Panel 04')
   const [ordenes, setOrdenes] = useState<string[]>([])
+  const [cantidades, setCantidades] = useState<Record<string, number>>({})
   const [salir, setSalir] = useState(true)
   const visibles = estado.rutas.filter((r) => (sucursalActiva === 'todas' || r.sucursalId === sucursalActiva) && (r.fecha === fechaGT() || r.estado !== 'finalizada'))
   const activas = visibles.filter((r) => r.estado !== 'finalizada')
@@ -46,11 +47,23 @@ export function Rutas() {
   function armar(event: React.FormEvent) {
     event.preventDefault()
     const resultado = ejecutar((actual) => {
-      const creada = crearRuta(actual, { sucursalId, repartidorId, vehiculo, ordenIds: ordenes })
+      const creada = crearRuta(actual, {
+        sucursalId,
+        repartidorId,
+        vehiculo,
+        ordenIds: ordenes,
+        cargas: ordenes.map((ordenId) => {
+          const orden = actual.ordenesVenta.find((o) => o.id === ordenId)
+          return {
+            ordenId,
+            lineas: (orden?.lineas ?? []).map((linea) => ({ lineaId: linea.id, cantidad: cantidades[linea.id] ?? pendienteLinea(linea) })),
+          }
+        }),
+      })
       if (!creada.ok || !creada.estado || !creada.id || !salir) return creada
       return iniciarRuta(creada.estado, creada.id)
     })
-    if (resultado.ok) { setDespacho(false); setOrdenes([]) }
+    if (resultado.ok) { setDespacho(false); setOrdenes([]); setCantidades({}) }
   }
 
   return (
@@ -94,7 +107,7 @@ export function Rutas() {
       <Modal titulo="Armar ruta" abierto={despacho} onCerrar={() => setDespacho(false)} ancho="max-w-lg">
         <form className="space-y-3" onSubmit={armar}>
           <Campo etiqueta="Sucursal">
-            <Lista value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setOrdenes([]); setRepartidorId('') }}>
+            <Lista value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setOrdenes([]); setCantidades({}); setRepartidorId('') }}>
               {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Lista>
           </Campo>
@@ -105,14 +118,53 @@ export function Rutas() {
             </Lista>
           </Campo>
           <Campo etiqueta="Vehículo"><Texto value={vehiculo} onChange={(e) => setVehiculo(e.target.value)} /></Campo>
-          <div className="max-h-64 space-y-2 overflow-auto">
+          <div className="max-h-72 space-y-2 overflow-auto">
+            <p className="text-xs text-slate-500">Marcá la orden y escribí cuánto sube al camión. Lo que dejes en cero no sale y queda para otra ruta.</p>
             {disponibles.map((orden) => {
               const serie = estado.series.find((s) => s.id === orden.serieId)
+              const marcada = ordenes.includes(orden.id)
               return (
-                <label key={orden.id} className="flex min-w-0 gap-2 rounded bg-slate-50 px-3 py-2 text-sm">
-                  <input className="mt-1" type="checkbox" checked={ordenes.includes(orden.id)} onChange={(e) => setOrdenes(e.target.checked ? [...ordenes, orden.id] : ordenes.filter((id) => id !== orden.id))} />
-                  <span className="min-w-0 break-words">{folio(serie?.prefijo ?? 'OV', orden.numero)} · {estado.socios.find((s) => s.id === orden.socioId)?.nombre}<br /><span className="text-xs text-slate-500">{orden.direccionEntrega}</span></span>
-                </label>
+                <div key={orden.id} className="rounded bg-slate-50 px-3 py-2 text-sm">
+                  <label className="flex min-w-0 gap-2">
+                    <input className="mt-1" type="checkbox" checked={marcada} onChange={(e) => {
+                      setOrdenes(e.target.checked ? [...ordenes, orden.id] : ordenes.filter((id) => id !== orden.id))
+                      if (e.target.checked) {
+                        setCantidades((prev) => {
+                          const siguiente = { ...prev }
+                          for (const linea of orden.lineas) if (siguiente[linea.id] == null) siguiente[linea.id] = pendienteLinea(linea)
+                          return siguiente
+                        })
+                      }
+                    }} />
+                    <span className="min-w-0 break-words">{folio(serie?.prefijo ?? 'OV', orden.numero)} · {estado.socios.find((s) => s.id === orden.socioId)?.nombre}<br /><span className="text-xs text-slate-500">{orden.direccionEntrega}</span></span>
+                  </label>
+                  {marcada && (
+                    <div className="mt-2 space-y-1 pl-6">
+                      {orden.lineas.map((linea) => {
+                        const tope = pendienteLinea(linea)
+                        return (
+                          <label key={linea.id} className="flex items-center gap-2">
+                            <span className="min-w-0 flex-1 break-words text-xs">{linea.descripcion}</span>
+                            <span className="text-xs text-slate-500">pedido {tope}</span>
+                            <input
+                              className="w-16 rounded border border-[#c5cdd2] bg-white px-2 py-1 text-right"
+                              type="number"
+                              min={0}
+                              max={tope}
+                              step={1}
+                              value={cantidades[linea.id] ?? tope}
+                              onChange={(e) => {
+                                const pedido = Number(e.target.value)
+                                const cantidad = Number.isFinite(pedido) ? Math.min(tope, Math.max(0, pedido)) : 0
+                                setCantidades((prev) => ({ ...prev, [linea.id]: cantidad }))
+                              }}
+                            />
+                          </label>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
               )
             })}
             {disponibles.length === 0 && <p className="text-sm text-slate-500">No hay órdenes confirmadas sin ruta en esta sucursal.</p>}

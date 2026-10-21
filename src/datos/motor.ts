@@ -67,22 +67,6 @@ function faltaStock(estado: Estado, sucursalId: string, lineas: { productoId: st
   return null
 }
 
-function salidaInventario(estado: Estado, orden: OrdenVenta, referencia: string, concepto: string, fecha: string) {
-  for (const linea of orden.lineas) {
-    if (!linea.controlaInventario) continue
-    estado.movimientos.push({
-      id: nid('mov'),
-      fecha,
-      sucursalId: orden.sucursalId,
-      productoId: linea.productoId,
-      tipo: 'salida',
-      cantidad: linea.cantidad,
-      referencia,
-      concepto,
-    })
-  }
-}
-
 function entradaInventario(estado: Estado, orden: OrdenVenta, referencia: string, concepto: string, fecha: string) {
   for (const linea of orden.lineas) {
     if (!linea.controlaInventario) continue
@@ -101,6 +85,40 @@ function entradaInventario(estado: Estado, orden: OrdenVenta, referencia: string
 
 function costoOrden(orden: OrdenVenta): number {
   return redondear(orden.lineas.filter((l) => l.controlaInventario).reduce((s, l) => s + redondear(l.cantidad * l.costoUnitario), 0))
+}
+
+function pendienteDe(linea: { cantidad: number; despachada?: number }): number {
+  return redondear(linea.cantidad - (linea.despachada ?? 0))
+}
+
+function cargaParada(orden: OrdenVenta, parada: { carga?: { lineaId: string; cantidad: number }[] }) {
+  if (parada.carga?.length) {
+    return parada.carga.flatMap((item) => {
+      const linea = orden.lineas.find((l) => l.id === item.lineaId)
+      return linea && item.cantidad > 0 ? [{ linea, cantidad: item.cantidad }] : []
+    })
+  }
+  return orden.lineas.filter((linea) => linea.cantidad > 0).map((linea) => ({ linea, cantidad: linea.cantidad }))
+}
+
+function costoCarga(items: { linea: { controlaInventario: boolean; costoUnitario: number }; cantidad: number }[]): number {
+  return redondear(items.filter((item) => item.linea.controlaInventario).reduce((s, item) => s + redondear(item.cantidad * item.linea.costoUnitario), 0))
+}
+
+function moverCarga(estado: Estado, orden: OrdenVenta, items: { linea: LineaComercial; cantidad: number }[], tipo: 'entrada' | 'salida', referencia: string, concepto: string, fecha: string) {
+  for (const item of items) {
+    if (!item.linea.controlaInventario || item.cantidad <= 0) continue
+    estado.movimientos.push({
+      id: nid('mov'),
+      fecha,
+      sucursalId: orden.sucursalId,
+      productoId: item.linea.productoId,
+      tipo,
+      cantidad: item.cantidad,
+      referencia,
+      concepto,
+    })
+  }
 }
 
 function exigirSerie(estado: Estado, sucursalId: string, tipo: TipoSerie): SerieDocumento | { error: string } {
@@ -645,8 +663,11 @@ export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: 
 
   const orden = estado.ordenesVenta.find((o) => o.id === factura.ordenVentaId)
   let costo = 0
-  if (factura.tipo === 'FACT' && orden && !orden.origenInventario) {
-    const falta = faltaStock(estado, orden.sucursalId, orden.lineas)
+  const porFacturar = orden && factura.tipo === 'FACT' && !orden.origenInventario
+    ? orden.lineas.map((linea) => ({ ...linea, cantidad: Math.max(0, pendienteDe(linea)) })).filter((linea) => linea.cantidad > 0.001)
+    : []
+  if (porFacturar.length > 0 && orden) {
+    const falta = faltaStock(estado, orden.sucursalId, porFacturar)
     if (falta) return { ok: false, error: falta }
   }
 
@@ -656,11 +677,15 @@ export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: 
   const totales = totalesVenta(factura.lineas)
   const socio = estado.socios.find((s) => s.id === factura.socioId)
 
-  if (factura.tipo === 'FACT' && orden && !orden.origenInventario) {
-    salidaInventario(estado, orden, referencia, 'Salida por factura de mostrador', factura.fecha)
-    orden.origenInventario = 'factura'
-    factura.movioInventario = true
-    costo = costoOrden(orden)
+  if (porFacturar.length > 0 && orden) {
+    const yaDespachada = orden.lineas.some((linea) => (linea.despachada ?? 0) > 0.001)
+    moverCarga(estado, orden, porFacturar.map((linea) => ({ linea: orden.lineas.find((l) => l.id === linea.id) ?? linea, cantidad: linea.cantidad })), 'salida', referencia, 'Salida por factura de mostrador', factura.fecha)
+    if (!yaDespachada) orden.origenInventario = 'factura'
+    for (const linea of orden.lineas) {
+      if (pendienteDe(linea) > 0.001) linea.despachada = linea.cantidad
+    }
+    factura.movioInventario = porFacturar.some((linea) => linea.controlaInventario)
+    costo = costoCarga(porFacturar.map((linea) => ({ linea, cantidad: linea.cantidad })))
   }
 
   if (factura.tipo === 'NCRE') {
@@ -753,6 +778,7 @@ export interface NuevaRuta {
   repartidorId: string
   vehiculo: string
   ordenIds: string[]
+  cargas?: { ordenId: string; lineas: { lineaId: string; cantidad: number }[] }[]
   fecha?: string
 }
 
@@ -775,6 +801,19 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
     if (facturaVigente(estado, orden.id) && orden.origenInventario === 'factura') {
       return { ok: false, error: 'Una orden ya facturada en mostrador no se sube al camión.' }
     }
+    const pedida = input.cargas?.find((carga) => carga.ordenId === orden.id)
+    const carga: { lineaId: string; cantidad: number }[] = []
+    for (const linea of orden.lineas) {
+      const elegida = pedida?.lineas.find((item) => item.lineaId === linea.id)
+      const cantidad = elegida ? elegida.cantidad : pendienteDe(linea)
+      if (cantidad <= 0) continue
+      if (cantidad - pendienteDe(linea) > 0.001) {
+        return { ok: false, error: `De ${linea.descripcion} solo quedan ${pendienteDe(linea)} por despachar.` }
+      }
+      carga.push({ lineaId: linea.id, cantidad })
+      linea.despachada = redondear((linea.despachada ?? 0) + cantidad)
+    }
+    if (carga.length === 0) return { ok: false, error: 'Indicá la cantidad que sube al camión.' }
     const socio = estado.socios.find((s) => s.id === orden.socioId)
     paradas.push({
       id: nid('par'),
@@ -786,11 +825,16 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
       lat: orden.lat,
       lng: orden.lng,
       ventana: orden.ventana,
-      resumen: orden.lineas.map((l) => `${l.cantidad} ${l.descripcion}`).join(' · '),
+      resumen: carga.map((item) => {
+        const linea = orden.lineas.find((l) => l.id === item.lineaId)
+        return `${item.cantidad} ${linea?.descripcion ?? ''}`.trim()
+      }).join(' · '),
+      carga,
       estado: 'pendiente' as const,
       incidencia: '',
     })
-    orden.estado = 'en_ruta'
+    const cubierta = orden.lineas.every((linea) => pendienteDe(linea) <= 0.001)
+    if (cubierta) orden.estado = 'en_ruta'
   }
   const codigo = `RT-${String(estado.siguienteRuta).padStart(4, '0')}`
   estado.siguienteRuta += 1
@@ -812,18 +856,27 @@ export function iniciarRuta(entrada: Estado, rutaId: string): Resultado {
   const estado = clonar(entrada)
   const ruta = estado.rutas.find((r) => r.id === rutaId)
   if (!ruta || ruta.estado !== 'planificada') return { ok: false, error: 'Esa ruta no está lista para salir.' }
-  const ordenes = ruta.paradas
-    .map((p) => estado.ordenesVenta.find((o) => o.id === p.ordenVentaId))
-    .filter((o): o is OrdenVenta => Boolean(o))
-  const pendientes = ordenes.filter((o) => !o.origenInventario)
-  const falta = faltaStock(estado, ruta.sucursalId, pendientes.flatMap((o) => o.lineas))
+  const cargas = ruta.paradas.flatMap((parada) => {
+    const orden = estado.ordenesVenta.find((o) => o.id === parada.ordenVentaId)
+    if (!orden || orden.origenInventario === 'factura') return []
+    return cargaParada(orden, parada).map((item) => ({ orden, ...item }))
+  })
+  const falta = faltaStock(estado, ruta.sucursalId, cargas.map((item) => ({ ...item.linea, cantidad: item.cantidad })))
   if (falta) return { ok: false, error: falta }
   const ahora = new Date().toISOString()
   let costo = 0
-  for (const orden of pendientes) {
-    salidaInventario(estado, orden, ruta.codigo, 'Carga del camión', ruta.fecha)
-    orden.origenInventario = 'ruta'
-    costo = redondear(costo + costoOrden(orden))
+  const porOrden = new Map<string, typeof cargas>()
+  for (const item of cargas) {
+    const lista = porOrden.get(item.orden.id) ?? []
+    lista.push(item)
+    porOrden.set(item.orden.id, lista)
+  }
+  for (const [ordenId, items] of porOrden) {
+    const orden = estado.ordenesVenta.find((o) => o.id === ordenId)
+    if (!orden) continue
+    moverCarga(estado, orden, items, 'salida', ruta.codigo, 'Carga del camión', ruta.fecha)
+    if (orden.lineas.every((linea) => pendienteDe(linea) <= 0.001)) orden.origenInventario = 'ruta'
+    costo = redondear(costo + costoCarga(items))
   }
   if (costo > 0) {
     const asiento = registrarAsiento(estado, {
@@ -876,14 +929,19 @@ export function marcarParada(entrada: Estado, rutaId: string, paradaId: string, 
   if (accion === 'entregada') {
     parada.estado = 'entregada'
     parada.entregadaEn = new Date().toISOString()
-    if (orden) orden.estado = 'entregada'
+    if (orden) {
+      const cubierta = orden.lineas.every((linea) => pendienteDe(linea) <= 0.001)
+      const otraAbierta = estado.rutas.some((otra) => otra.estado !== 'finalizada' && otra.paradas.some((p) => p.ordenVentaId === orden.id && p.id !== parada.id && p.estado !== 'entregada' && p.estado !== 'incidencia'))
+      orden.estado = cubierta && !otraAbierta ? 'entregada' : 'confirmada'
+    }
   } else {
     if (!motivo.trim()) return { ok: false, error: 'Indicá el motivo de la incidencia.' }
     parada.estado = 'incidencia'
     parada.incidencia = motivo.trim()
-    if (orden?.origenInventario === 'ruta') {
-      entradaInventario(estado, orden, ruta.codigo, 'Regreso por incidencia', fechaGT())
-      const costo = costoOrden(orden)
+    if (orden && orden.origenInventario !== 'factura') {
+      const items = cargaParada(orden, parada)
+      moverCarga(estado, orden, items, 'entrada', ruta.codigo, 'Regreso por incidencia', fechaGT())
+      const costo = costoCarga(items)
       if (costo > 0) {
         const asiento = registrarAsiento(estado, {
           fecha: fechaGT(),
@@ -898,7 +956,8 @@ export function marcarParada(entrada: Estado, rutaId: string, paradaId: string, 
         })
         if ('error' in asiento) return { ok: false, error: asiento.error }
       }
-      orden.origenInventario = null
+      for (const item of items) item.linea.despachada = Math.max(0, redondear((item.linea.despachada ?? 0) - item.cantidad))
+      if (orden.origenInventario === 'ruta') orden.origenInventario = null
     }
     if (orden) orden.estado = 'confirmada'
   }

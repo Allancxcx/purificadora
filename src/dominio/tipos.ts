@@ -136,6 +136,7 @@ export interface LineaComercial {
   bienOServicio: 'B' | 'S'
   unidad: string
   cantidad: number
+  despachada?: number
   precioUnitario: number
   descuento: number
   costoUnitario: number
@@ -324,6 +325,7 @@ export interface Parada {
   lng: number
   ventana: string
   resumen: string
+  carga?: { lineaId: string; cantidad: number }[]
   estado: EstadoParada
   incidencia: string
   entregadaEn?: string

@@ -52,10 +52,15 @@ export function facturaVigente(estado: Estado, ordenId: string): Factura | undef
   return estado.facturas.find((f) => f.ordenVentaId === ordenId && f.tipo === 'FACT' && f.estado !== 'cancelada' && !f.ajustada)
 }
 
+export function pendienteLinea(linea: { cantidad: number; despachada?: number }): number {
+  return Math.max(0, redondear(linea.cantidad - (linea.despachada ?? 0)))
+}
+
 export function ordenDespachable(estado: Estado, orden: OrdenVenta): boolean {
   if (orden.estado !== 'confirmada') return false
+  if (!orden.lineas.some((linea) => pendienteLinea(linea) > 0)) return false
   if (facturaVigente(estado, orden.id)) return false
-  return !estado.rutas.some((ruta) => ruta.estado !== 'finalizada' && ruta.paradas.some((p) => p.ordenVentaId === orden.id && p.estado !== 'incidencia'))
+  return true
 }
 
 export function posicionRepartidor(ruta: Ruta, bodega: Punto, now: number): Punto {
