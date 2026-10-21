@@ -24,21 +24,21 @@ function indicadoresGuardados() {
 }
 
 export function Dashboard() {
-  const { estado, sucursalActiva } = useErp()
+  const { estado, sucursalActiva, permitidas, enVista } = useErp()
   const [visibles, setVisibles] = useState(indicadoresGuardados)
   const [personalizar, setPersonalizar] = useState(false)
   const mes = fechaGT().slice(0, 7)
   const general = sucursalActiva === 'todas'
   const vista = general ? 'General' : (estado.sucursales.find((s) => s.id === sucursalActiva)?.nombre ?? 'Sucursal')
-  const facturas = deSucursal(estado.facturas, sucursalActiva)
+  const facturas = deSucursal(estado.facturas, sucursalActiva, permitidas)
   const cerradas = facturas.filter((f) => f.estado === 'cerrada' && f.fecha.startsWith(mes))
   const vendido = cerradas.filter((f) => f.tipo === 'FACT' && !f.ajustada).reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
   const creditos = cerradas.filter((f) => f.tipo === 'NCRE').reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
   const debitos = cerradas.filter((f) => f.tipo === 'NDEB').reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
   const porCobrar = facturas.reduce((s, f) => s + saldoFactura(f), 0)
   const abiertas = facturas.filter((f) => f.estado === 'abierta').length
-  const rutas = deSucursal(estado.rutas, sucursalActiva).filter((r) => r.fecha === fechaGT())
-  const sucursales = sucursalActiva === 'todas' ? estado.sucursales : estado.sucursales.filter((s) => s.id === sucursalActiva)
+  const rutas = deSucursal(estado.rutas, sucursalActiva, permitidas).filter((r) => r.fecha === fechaGT())
+  const sucursales = estado.sucursales.filter((s) => enVista(s.id))
   const bajos = estado.productos.filter((p) => p.controlaInventario && p.activo).flatMap((p) => sucursales.map((s) => ({ producto: p, sucursal: s, cantidad: stock(estado, s.id, p.id) })).filter((x) => x.cantidad < p.minimo))
   const valores: Record<string, string> = {
     ventas: quetzales(vendido - creditos + debitos),
@@ -86,7 +86,7 @@ export function Dashboard() {
           columnas={['Sucursal', 'Ventas del mes', 'Por cobrar', 'Rutas de hoy', 'Facturas abiertas']}
           vacio="No hay sucursales."
           filas={[
-            ...estado.sucursales.map((sucursal) => {
+            ...sucursales.map((sucursal) => {
               const docs = deSucursal(estado.facturas, sucursal.id)
               const delMes = docs.filter((f) => f.estado === 'cerrada' && f.fecha.startsWith(mes))
               const venta = delMes.filter((f) => f.tipo === 'FACT' && !f.ajustada).reduce((s, f) => s + totalesVenta(f.lineas).total, 0)

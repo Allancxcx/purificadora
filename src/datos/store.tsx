@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { TODAS_LAS_OPCIONES } from '../dominio/permisos'
 import type { Empresa, Estado, EstadoFactura, Rol, SerieDocumento, Usuario } from '../dominio/tipos'
+import { sucursalesDe } from './consultas'
 import { aplicarCertificacion, completarCatalogos, type Resultado } from './motor'
 import { armarDte } from './dte'
 import { construirSemilla } from './semilla'
@@ -74,6 +75,11 @@ function migrar(estado: Estado): Estado {
       const extra = (COMPLEMENTO_ROL[rol.id] ?? []).filter((codigo) => !rol.opciones.includes(codigo))
       return extra.length ? { ...rol, opciones: [...rol.opciones, ...extra] } : rol
     }),
+    usuarios: estado.usuarios.map((usuario) => {
+      const sucursalesIds = sucursalesDe(usuario)
+      const conSede = sucursalesIds.includes(usuario.sucursalId) ? sucursalesIds : [usuario.sucursalId, ...sucursalesIds]
+      return { ...usuario, sucursalesIds: conSede.filter(Boolean) }
+    }),
   }
   return completarCatalogos(armado)
 }
@@ -98,6 +104,9 @@ interface ErpValor {
   sesion: Usuario | null
   rol: Rol | null
   sucursalActiva: string
+  permitidas: string[]
+  sede: string
+  enVista: (sucursalId: string) => boolean
   verEmpresa: boolean
   aviso: Aviso | null
   certificando: string | null
@@ -147,7 +156,14 @@ export function ErpProvider({ children }: { children: ReactNode }) {
   const sesion = estado.usuarios.find((u) => u.id === sesionId && u.activo) ?? null
   const rol = estado.roles.find((r) => r.id === sesion?.rolId) ?? null
   const verEmpresa = rol?.alcance === 'empresa'
-  const sucursalActiva = verEmpresa ? elegida : (sesion?.sucursalId ?? 'todas')
+  const permitidas = verEmpresa ? estado.sucursales.map((s) => s.id) : (sesion ? sucursalesDe(sesion) : [])
+  const puedeElegir = permitidas.length > 1
+  const sucursalActiva = !puedeElegir
+    ? (permitidas[0] ?? 'todas')
+    : (elegida === 'todas' || permitidas.includes(elegida) ? elegida : 'todas')
+  const sede = sucursalActiva !== 'todas'
+    ? sucursalActiva
+    : (estado.sucursales.find((s) => s.esMatriz && permitidas.includes(s.id))?.id ?? permitidas[0] ?? estado.sucursales[0]?.id ?? '')
 
   function commit(siguiente: Estado) {
     ref.current = siguiente
@@ -167,12 +183,16 @@ export function ErpProvider({ children }: { children: ReactNode }) {
     sesion,
     rol,
     sucursalActiva,
+    permitidas,
+    sede,
+    enVista: (sucursalId) => permitidas.includes(sucursalId) && (sucursalActiva === 'todas' || sucursalId === sucursalActiva),
     verEmpresa: Boolean(verEmpresa),
     aviso,
     certificando,
     puede: (codigo) => Boolean(rol?.opciones.includes(codigo)),
     setSucursalActiva: (id) => {
-      if (!verEmpresa) return
+      if (permitidas.length < 2) return
+      if (id !== 'todas' && !permitidas.includes(id)) return
       sessionStorage.setItem(SUC, id)
       setElegida(id)
     },
@@ -180,7 +200,8 @@ export function ErpProvider({ children }: { children: ReactNode }) {
       const usuario = ref.current.usuarios.find((u) => u.correo === correo.trim().toLowerCase() && u.clave === clave && u.activo)
       if (!usuario) return 'Correo o clave incorrectos.'
       const rolUsuario = ref.current.roles.find((r) => r.id === usuario.rolId)
-      const sucursal = rolUsuario?.alcance === 'empresa' ? 'todas' : usuario.sucursalId
+      const asignadas = sucursalesDe(usuario)
+      const sucursal = rolUsuario?.alcance === 'empresa' || asignadas.length > 1 ? 'todas' : (asignadas[0] ?? usuario.sucursalId)
       sessionStorage.setItem(SESION, usuario.id)
       sessionStorage.setItem(SUC, sucursal)
       setSesionId(usuario.id)

@@ -9,7 +9,7 @@ import { Boton, Campo, Lista, Pagina, Tabla, Tarjeta, Texto } from '../component
 type Pestana = 'diario' | 'mayor' | 'balanza' | 'resultados' | 'balance' | 'nuevo'
 
 export function Contabilidad() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, permitidas, sede, puede, ejecutar } = useErp()
   const [pestana, setPestana] = useState<Pestana>('diario')
   const [desde, setDesde] = useState('')
   const [hasta, setHasta] = useState('')
@@ -21,11 +21,12 @@ export function Contabilidad() {
   ])
 
   const asientos = useMemo(() => estado.asientos.filter((a) => {
+    if (!permitidas.includes(a.sucursalId)) return false
     if (sucursalActiva !== 'todas' && a.sucursalId !== sucursalActiva) return false
     if (desde && a.fecha < desde) return false
     if (hasta && a.fecha > hasta) return false
     return true
-  }), [estado.asientos, sucursalActiva, desde, hasta])
+  }), [estado.asientos, sucursalActiva, permitidas, desde, hasta])
 
   const balanza = useMemo(() => estado.cuentas.map((cuenta) => {
     let debe = 0
@@ -85,7 +86,7 @@ export function Contabilidad() {
   const totalPatrimonio = redondear(patrimonio.reduce((s, f) => s + f.saldo, 0) + resultado)
 
   return (
-    <Pagina titulo="Contabilidad" detalle={sucursalActiva === 'todas' ? 'Vista general: junta los asientos de todas las sucursales y, en resultados, los parte por tienda.' : `Vista de ${estado.sucursales.find((s) => s.id === sucursalActiva)?.nombre ?? 'la sucursal'}. Los libros usan solo sus asientos.`}>
+    <Pagina titulo="Contabilidad" detalle={sucursalActiva === 'todas' ? 'Vista general: junta los asientos de las sucursales de esta vista y, en resultados, los parte por tienda.' : `Vista de ${estado.sucursales.find((s) => s.id === sucursalActiva)?.nombre ?? 'la sucursal'}. Los libros usan solo sus asientos.`}>
       <div className="flex flex-wrap gap-2">
         {([['diario', 'Libro diario'], ['mayor', 'Mayor'], ['balanza', 'Balanza'], ['resultados', 'Resultados'], ['balance', 'Balance general'], ['nuevo', 'Asiento']] as const).map(([id, nombre]) => (
           <Boton key={id} variante={pestana === id ? 'primario' : 'secundario'} onClick={() => setPestana(id)}>{nombre}</Boton>
@@ -133,7 +134,7 @@ export function Contabilidad() {
             columnas={['Sucursal', 'Ingresos', 'Costos', 'Gastos', 'Resultado']}
             vacio="No hay sucursales."
             filas={[
-              ...estado.sucursales.map((sucursal) => {
+              ...estado.sucursales.filter((s) => permitidas.includes(s.id)).map((sucursal) => {
                 const corte = resumir(asientos.filter((a) => a.sucursalId === sucursal.id))
                 return { id: sucursal.id, celdas: [sucursal.nombre, quetzales(corte.ingreso), quetzales(corte.costo), quetzales(corte.gasto), quetzales(corte.resultado)] }
               }),
@@ -173,7 +174,7 @@ export function Contabilidad() {
           {puede('contabilidad.editar') ? (
             <form className="space-y-3" onSubmit={(e) => {
               e.preventDefault()
-              const resultadoAsiento = ejecutar((actual) => asientoManual(actual, { fecha: fechaGT(), sucursalId: sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva, descripcion, lineas }))
+              const resultadoAsiento = ejecutar((actual) => asientoManual(actual, { fecha: fechaGT(), sucursalId: sede, descripcion, lineas }))
               if (resultadoAsiento.ok) setDescripcion('')
             }}>
               <Campo etiqueta="Descripción"><Texto value={descripcion} onChange={(e) => setDescripcion(e.target.value)} /></Campo>

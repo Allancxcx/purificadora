@@ -14,7 +14,7 @@ const ETIQUETA: Record<EstadoFactura, string> = { abierta: 'Abierta', cerrada: '
 const TIPO: Record<string, string> = { FACT: 'Factura', NCRE: 'Nota de crédito', NDEB: 'Nota de débito' }
 
 export function Facturas() {
-  const { estado, sucursalActiva, puede, ejecutar, certificar, certificando } = useErp()
+  const { estado, sucursalActiva, enVista, puede, ejecutar, certificar, certificando } = useErp()
   const [vista, setVista] = useState<string | null>(null)
   const [cobro, setCobro] = useState<string | null>(null)
   const [monto, setMonto] = useState(0)
@@ -23,7 +23,7 @@ export function Facturas() {
   const [ajuste, setAjuste] = useState<null | { id: string; modo: 'credito' | 'debito' | 'anular' }>(null)
   const [motivo, setMotivo] = useState('')
   const general = sucursalActiva === 'todas'
-  const facturas = estado.facturas.filter((f) => general || f.sucursalId === sucursalActiva)
+  const facturas = estado.facturas.filter((f) => enVista(f.sucursalId))
   const abierta = facturas.find((f) => f.id === vista)
 
   function descargar(id: string) {

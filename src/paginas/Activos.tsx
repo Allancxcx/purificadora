@@ -24,12 +24,12 @@ const vacio = (sucursalId: string) => ({
 })
 
 export function Activos() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, permitidas, sede, enVista, puede, ejecutar } = useErp()
   const [form, setForm] = useState<(ReturnType<typeof vacio> & { id?: string }) | null>(null)
-  const sucursalDefault = sucursalActiva === 'todas' ? estado.sucursales[0].id : sucursalActiva
-  const visibles = estado.vehiculos.filter((v) => sucursalActiva === 'todas' || v.sucursalId === sucursalActiva)
+  const sucursalDefault = sede
+  const visibles = estado.vehiculos.filter((v) => enVista(v.sucursalId))
   const valor = visibles.reduce((suma, vehiculo) => suma + vehiculo.valor, 0)
-  const contable = saldoCuenta(estado, CTA.flota, sucursalActiva)
+  const contable = saldoCuenta(estado, CTA.flota, sucursalActiva, permitidas)
 
   function etiqueta(vehiculo: Vehiculo) {
     if (vehiculo.estado !== 'en_ruta') return ETIQUETA[vehiculo.estado]
@@ -71,7 +71,7 @@ export function Activos() {
             <Campo etiqueta="Placa"><Texto value={form.placa} onChange={(e) => setForm({ ...form, placa: e.target.value.toUpperCase() })} required /></Campo>
             <Campo etiqueta="Sucursal">
               <Lista value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })}>
-                {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </Lista>
             </Campo>
             <Campo etiqueta="Año"><Texto type="number" value={form.anio} onChange={(e) => setForm({ ...form, anio: Number(e.target.value) })} /></Campo>

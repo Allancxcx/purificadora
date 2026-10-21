@@ -12,7 +12,7 @@ const PASOS: PasoTour[] = [
   { selector: '[data-tour="nav-contabilidad"]', titulo: 'Libros', texto: 'El diario, el mayor y los estados salen de los mismos asientos. En cada grilla podés elegir columnas, orden y cuántas filas ver.' },
   { selector: '[data-tour="nav-precios"]', titulo: 'Listas de precios', texto: 'Al armar el pedido, el precio de cada producto sale de la lista del cliente. En la línea todavía lo podés cambiar.' },
   { selector: '[data-tour="nav-activos"]', titulo: 'Flota', texto: 'Los vehículos son activos fijos. Al despachar se elige uno que esté disponible en la sucursal.' },
-  { selector: '[data-tour="sucursal"]', titulo: 'Vista', texto: 'General reúne toda la empresa y parte los reportes por sucursal. Si elegís una sucursal, el tablero, los documentos, el inventario y la contabilidad quedan solo de esa tienda.' },
+  { selector: '[data-tour="sucursal"]', titulo: 'Vista', texto: 'Con varias sucursales, General junta solo esas y podés bajar a una. Con una sola, la vista queda fija. Un rol de empresa ve todas.' },
   { selector: '[data-tour="guia"]', titulo: 'Esta guía', texto: 'Podés volver a abrirla cuando quieras. Es una aplicación instalable: en el teléfono, desde el navegador, se agrega a la pantalla de inicio.' },
 ]
 
@@ -36,7 +36,7 @@ const NAV = [
 ]
 
 export function Shell() {
-  const { estado, sesion, rol, sucursalActiva, verEmpresa, setSucursalActiva, puede, salir, restaurar } = useErp()
+  const { estado, sesion, rol, sucursalActiva, permitidas, enVista, setSucursalActiva, puede, salir, restaurar } = useErp()
   const [abierto, setAbierto] = useState(false)
   const [tour, setTour] = useState(() => localStorage.getItem('manantial.tour') !== 'visto')
   const navigate = useNavigate()
@@ -47,7 +47,8 @@ export function Shell() {
     localStorage.setItem('manantial.tour', 'visto')
     setTour(false)
   }
-  const enCurso = estado.rutas.filter((r) => r.estado === 'en_curso' && (sucursalActiva === 'todas' || r.sucursalId === sucursalActiva)).length
+  const enCurso = estado.rutas.filter((r) => r.estado === 'en_curso' && enVista(r.sucursalId)).length
+  const opcionesVista = estado.sucursales.filter((s) => permitidas.includes(s.id))
 
   const lateral = (
     <div className="flex h-full flex-col bg-[#083844] text-white">
@@ -85,13 +86,13 @@ export function Shell() {
           <button className="grid h-9 w-9 place-items-center rounded border border-[#d5dde2] lg:hidden" onClick={() => setAbierto(true)} aria-label="Abrir menú"><Menu size={18} /></button>
           <label className="flex items-center gap-2 text-sm" data-tour="sucursal">
             <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5c6770]">Vista</span>
-            {verEmpresa ? (
+            {opcionesVista.length > 1 ? (
               <select className="rounded border border-[#c5cdd2] bg-white px-2 py-1.5 text-sm" aria-label="Vista" value={sucursalActiva} onChange={(e) => setSucursalActiva(e.target.value)}>
                 <option value="todas">General</option>
-                {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {opcionesVista.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </select>
             ) : (
-              <span className="rounded border border-[#d5dde2] bg-[#f7f9fa] px-2 py-1.5">{estado.sucursales.find((s) => s.id === sucursalActiva)?.nombre}</span>
+              <span className="rounded border border-[#d5dde2] bg-[#f7f9fa] px-2 py-1.5">{opcionesVista[0]?.nombre}</span>
             )}
           </label>
           <div className="ml-auto flex flex-wrap items-center gap-2 text-sm">

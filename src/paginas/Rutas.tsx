@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useErp } from '../datos/store'
 import { crearRuta, iniciarRuta } from '../datos/motor'
-import { folio, kilometrosRuta, ordenDespachable, pendienteLinea, posicionRepartidor } from '../datos/consultas'
+import { folio, kilometrosRuta, ordenDespachable, pendienteLinea, posicionRepartidor, sucursalesDe } from '../datos/consultas'
 import { distanciaKm } from '../dominio/geo'
 import { fechaGT } from '../dominio/formato'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta } from '../componentes/ui'
@@ -19,13 +19,13 @@ function useReloj() {
 }
 
 export function Rutas() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, permitidas, sede, enVista, puede, ejecutar } = useErp()
   const ahora = useReloj()
   const [seleccion, setSeleccion] = useState<string | undefined>()
   const [despacho, setDespacho] = useState(false)
-  const [sucursalId, setSucursalId] = useState(sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva)
+  const [sucursalId, setSucursalId] = useState(sede)
   const [repartidorId, setRepartidorId] = useState('')
-  const [vehiculoId, setVehiculoId] = useState(() => estado.vehiculos.find((v) => v.sucursalId === (sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva) && v.estado === 'disponible')?.id ?? '')
+  const [vehiculoId, setVehiculoId] = useState(() => estado.vehiculos.find((v) => v.sucursalId === sede && v.estado === 'disponible')?.id ?? '')
   const [ordenes, setOrdenes] = useState<string[]>([])
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   const [salir, setSalir] = useState(true)
@@ -37,7 +37,7 @@ export function Rutas() {
     setCantidades({})
     setVehiculoId(estado.vehiculos.find((v) => v.sucursalId === sucursalActiva && v.estado === 'disponible')?.id ?? '')
   }, [sucursalActiva])
-  const visibles = estado.rutas.filter((r) => (sucursalActiva === 'todas' || r.sucursalId === sucursalActiva) && (r.fecha === fechaGT() || r.estado !== 'finalizada'))
+  const visibles = estado.rutas.filter((r) => enVista(r.sucursalId) && (r.fecha === fechaGT() || r.estado !== 'finalizada'))
   const activas = visibles.filter((r) => r.estado !== 'finalizada')
   const mapa = activas.map((ruta, i) => ({
     ruta,
@@ -49,7 +49,7 @@ export function Rutas() {
     return { rutaId: ruta.id, punto: posicionRepartidor(ruta, bodega, ahora) }
   })
   const elegida = visibles.find((r) => r.id === seleccion) ?? visibles[0]
-  const repartidores = estado.usuarios.filter((u) => u.activo && u.sucursalId === sucursalId && estado.roles.find((r) => r.id === u.rolId)?.esRepartidor)
+  const repartidores = estado.usuarios.filter((u) => u.activo && sucursalesDe(u).includes(sucursalId) && estado.roles.find((r) => r.id === u.rolId)?.esRepartidor)
   const flota = estado.vehiculos.filter((v) => v.sucursalId === sucursalId && v.estado === 'disponible')
   const disponibles = estado.ordenesVenta.filter((o) => o.sucursalId === sucursalId && ordenDespachable(estado, o))
 
@@ -110,7 +110,7 @@ export function Rutas() {
           )}
         </div>
         <div className="relative z-0 h-full min-h-[420px] min-w-0 overflow-hidden rounded-md">
-          <MapaRutas rutas={mapa} bodegas={estado.sucursales.map((s) => ({ id: s.id, nombre: s.nombre, punto: s, matriz: s.esMatriz }))} posiciones={posiciones} seleccionada={elegida?.id} onSeleccionar={setSeleccion} />
+          <MapaRutas rutas={mapa} bodegas={estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => ({ id: s.id, nombre: s.nombre, punto: s, matriz: s.esMatriz }))} posiciones={posiciones} seleccionada={elegida?.id} onSeleccionar={setSeleccion} />
         </div>
       </div>
       <Modal titulo="Armar ruta" abierto={despacho} onCerrar={() => setDespacho(false)} ancho="max-w-lg">
@@ -124,7 +124,7 @@ export function Rutas() {
               setRepartidorId('')
               setVehiculoId(estado.vehiculos.find((v) => v.sucursalId === id && v.estado === 'disponible')?.id ?? '')
             }}>
-              {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+              {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Lista>
           </Campo>
           <Campo etiqueta="Repartidor">

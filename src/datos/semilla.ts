@@ -163,7 +163,7 @@ export function construirSemilla(): Estado {
     },
     sucursales,
     roles,
-    usuarios: CUENTAS_DEMO.map((c) => ({ id: c.id, nombre: c.nombre, correo: c.correo, clave: CLAVE_DEMO, rolId: c.rolId, sucursalId: c.sucursalId, telefono: c.telefono, activo: true })),
+    usuarios: CUENTAS_DEMO.map((c) => ({ id: c.id, nombre: c.nombre, correo: c.correo, clave: CLAVE_DEMO, rolId: c.rolId, sucursalId: c.sucursalId, sucursalesIds: [c.sucursalId], telefono: c.telefono, activo: true })),
     socios,
     productos,
     vehiculos: flotaInicial(),

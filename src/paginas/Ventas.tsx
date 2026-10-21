@@ -9,9 +9,9 @@ import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../comp
 interface LineaForm { productoId: string; cantidad: number; precioUnitario: number; descuento: number }
 
 export function Ventas() {
-  const { estado, sucursalActiva, sesion, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, sede, enVista, sesion, puede, ejecutar } = useErp()
   const [abierto, setAbierto] = useState(false)
-  const sucursalId = sucursalActiva === 'todas' ? estado.sucursales[0].id : sucursalActiva
+  const sucursalId = sede
   const clientes = estado.socios.filter((s) => s.roles.includes('cliente') && s.estado === 'activo')
   const inicial = clientes.find((s) => s.sucursalId === sucursalId) ?? clientes[0]
   const [socioId, setSocioId] = useState(inicial?.id ?? '')
@@ -23,7 +23,7 @@ export function Ventas() {
   const [lineas, setLineas] = useState<LineaForm[]>([{ productoId: 'prod-gar', cantidad: 10, precioUnitario: precioLista(estado, listaDelSocio(estado, inicial?.id ?? ''), 'prod-gar'), descuento: 0 }])
 
   const general = sucursalActiva === 'todas'
-  const ordenes = estado.ordenesVenta.filter((o) => general || o.sucursalId === sucursalActiva)
+  const ordenes = estado.ordenesVenta.filter((o) => enVista(o.sucursalId))
   const productos = estado.productos.filter((p) => p.activo)
 
   function aplicarLista(id: string, actuales = lineas) {

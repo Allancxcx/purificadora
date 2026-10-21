@@ -15,18 +15,18 @@ const vacio = (sucursalId: string): Borrador => ({
 })
 
 export function Socios() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, permitidas, sede, enVista, puede, ejecutar } = useErp()
   const [q, setQ] = useState('')
   const [rol, setRol] = useState<'todos' | RolSocio>('todos')
   const [form, setForm] = useState<Borrador | null>(null)
-  const sucursalDefault = sucursalActiva === 'todas' ? estado.sucursales[0].id : sucursalActiva
+  const sucursalDefault = sede
 
   const filas = useMemo(() => estado.socios.filter((s) => {
-    if (sucursalActiva !== 'todas' && s.sucursalId !== sucursalActiva) return false
+    if (!enVista(s.sucursalId)) return false
     if (rol !== 'todos' && !s.roles.includes(rol)) return false
     const texto = `${s.nombre} ${s.nit} ${s.codigo}`.toLowerCase()
     return texto.includes(q.toLowerCase())
-  }), [estado.socios, sucursalActiva, rol, q])
+  }), [estado.socios, sucursalActiva, permitidas, enVista, rol, q])
 
   function guardar(event: React.FormEvent) {
     event.preventDefault()
@@ -74,7 +74,7 @@ export function Socios() {
             <Campo etiqueta="NIT o CF"><Texto value={form.nit} onChange={(e) => setForm({ ...form, nit: e.target.value })} required /></Campo>
             <Campo etiqueta="Sucursal">
               <Lista value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })}>
-                {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </Lista>
             </Campo>
             <div className="sm:col-span-2">

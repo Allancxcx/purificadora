@@ -10,12 +10,12 @@ const vacia = (): Omit<Sucursal, 'id'> => ({
 })
 
 export function Sucursales() {
-  const { estado, puede, ejecutar } = useErp()
+  const { estado, permitidas, puede, ejecutar } = useErp()
   const [form, setForm] = useState<(Omit<Sucursal, 'id'> & { id?: string }) | null>(null)
   return (
     <Pagina titulo="Sucursales" detalle="Cada sucursal es un establecimiento SAT. Las series, el inventario y las rutas viven en una sucursal." accion={puede('sucursales.editar') && <Boton onClick={() => setForm(vacia())}>Nueva sucursal</Boton>}>
       <div className="grid gap-3 md:grid-cols-3">
-        {estado.sucursales.map((s) => (
+        {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => (
           <Tarjeta key={s.id}>
             <div className="flex items-center justify-between"><h2 className="font-display text-2xl">{s.nombre}</h2><Badge tono={s.activa ? 'ok' : 'neutro'}>{s.activa ? 'Activa' : 'Inactiva'}</Badge></div>
             <p className="mt-2 text-sm text-slate-600">{s.direccion}</p>

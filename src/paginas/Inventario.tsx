@@ -12,13 +12,13 @@ const nuevo = (): Omit<Producto, 'id'> => ({
 })
 
 export function Inventario() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, permitidas, enVista, puede, ejecutar } = useErp()
   const [productoId, setProductoId] = useState('prod-gar')
   const [form, setForm] = useState<(Omit<Producto, 'id'> & { id?: string }) | null>(null)
-  const sucursales = estado.sucursales.filter((s) => sucursalActiva === 'todas' || s.id === sucursalActiva)
-  const valor = valorInventario(estado, sucursalActiva === 'todas' ? undefined : sucursalActiva)
-  const contable = saldoCuenta(estado, CTA.inventario, sucursalActiva)
-  const movimientos = estado.movimientos.filter((m) => m.productoId === productoId && (sucursalActiva === 'todas' || m.sucursalId === sucursalActiva)).slice().reverse().slice(0, 12)
+  const sucursales = estado.sucursales.filter((s) => enVista(s.id))
+  const valor = valorInventario(estado, sucursalActiva, permitidas)
+  const contable = saldoCuenta(estado, CTA.inventario, sucursalActiva, permitidas)
+  const movimientos = estado.movimientos.filter((m) => m.productoId === productoId && enVista(m.sucursalId)).slice().reverse().slice(0, 12)
 
   return (
     <Pagina titulo="Inventario" detalle="El kardex es la existencia. El camión descuenta al salir y la factura de mostrador descuenta al certificarse." accion={puede('productos.editar') && <Boton onClick={() => setForm(nuevo())}>Nuevo producto</Boton>}>

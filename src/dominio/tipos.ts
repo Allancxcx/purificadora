@@ -72,6 +72,7 @@ export interface Usuario {
   clave: string
   rolId: string
   sucursalId: string
+  sucursalesIds: string[]
   telefono: string
   activo: boolean
 }

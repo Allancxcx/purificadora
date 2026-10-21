@@ -274,16 +274,27 @@ export function guardarUsuario(entrada: Estado, input: Omit<Usuario, 'id'> & { i
   if (estado.usuarios.some((u) => u.correo.toLowerCase() === input.correo.toLowerCase() && u.id !== input.id)) {
     return { ok: false, error: 'Ese correo ya tiene usuario.' }
   }
-  if (!estado.roles.some((r) => r.id === input.rolId)) return { ok: false, error: 'Elegí un rol.' }
+  const rol = estado.roles.find((r) => r.id === input.rolId)
+  if (!rol) return { ok: false, error: 'Elegí un rol.' }
+  let sucursalesIds = [...new Set(input.sucursalesIds ?? [])].filter((id) => estado.sucursales.some((s) => s.id === id))
+  if (rol.esRepartidor || rol.alcance === 'empresa') {
+    const una = sucursalesIds.includes(input.sucursalId) ? input.sucursalId : sucursalesIds[0]
+    if (!una) return { ok: false, error: rol.esRepartidor ? 'El repartidor opera una sola sucursal.' : 'Elegí la sede del usuario.' }
+    sucursalesIds = [una]
+  } else if (sucursalesIds.length === 0) {
+    return { ok: false, error: 'Marcá al menos una sucursal.' }
+  }
+  const sucursalId = sucursalesIds.includes(input.sucursalId) ? input.sucursalId : sucursalesIds[0]
+  const usuario = { ...input, correo: input.correo.toLowerCase(), sucursalId, sucursalesIds }
   if (input.id) {
     const actual = estado.usuarios.find((u) => u.id === input.id)
     if (!actual) return { ok: false, error: 'No encontré el usuario.' }
-    Object.assign(actual, { ...input, correo: input.correo.toLowerCase() })
+    Object.assign(actual, usuario)
     return { ok: true, estado, id: actual.id, aviso: 'Usuario actualizado' }
   }
-  const usuario: Usuario = { ...input, id: nid('usr'), correo: input.correo.toLowerCase() }
-  estado.usuarios.push(usuario)
-  return { ok: true, estado, id: usuario.id, aviso: 'Usuario creado' }
+  const creado: Usuario = { ...usuario, id: nid('usr') }
+  estado.usuarios.push(creado)
+  return { ok: true, estado, id: creado.id, aviso: 'Usuario creado' }
 }
 
 export function guardarProducto(entrada: Estado, input: Omit<Producto, 'id'> & { id?: string }): Resultado {

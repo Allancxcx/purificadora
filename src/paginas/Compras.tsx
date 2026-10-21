@@ -7,16 +7,16 @@ import { formatoFecha, quetzales } from '../dominio/formato'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
 
 export function Compras() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, sede, enVista, puede, ejecutar } = useErp()
   const [abierto, setAbierto] = useState(false)
-  const sucursalId = sucursalActiva === 'todas' ? estado.sucursales[0].id : sucursalActiva
+  const sucursalId = sede
   const proveedores = estado.socios.filter((s) => s.roles.includes('proveedor') && s.estado === 'activo')
   const productos = estado.productos.filter((p) => p.activo && p.controlaInventario)
   const [socioId, setSocioId] = useState(proveedores[0]?.id ?? '')
   const [notas, setNotas] = useState('')
   const [lineas, setLineas] = useState([{ productoId: productos[0]?.id ?? '', cantidad: 40, costoUnitario: productos[0]?.costo ?? 0 }])
   const general = sucursalActiva === 'todas'
-  const ordenes = estado.ordenesCompra.filter((o) => general || o.sucursalId === sucursalActiva)
+  const ordenes = estado.ordenesCompra.filter((o) => enVista(o.sucursalId))
 
   function guardar(event: React.FormEvent) {
     event.preventDefault()

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useErp } from '../datos/store'
+import { sucursalesDe } from '../datos/consultas'
 import { eliminarRol, guardarRol, guardarUsuario } from '../datos/motor'
 import { CATALOGO_OPCIONES, TODAS_LAS_OPCIONES } from '../dominio/permisos'
 import type { Rol, Usuario } from '../dominio/tipos'
@@ -8,11 +9,11 @@ import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Tarjeta, Texto } from
 type BorradorUsuario = Omit<Usuario, 'id'> & { id?: string }
 
 const vacioUsuario = (rolId: string, sucursalId: string): BorradorUsuario => ({
-  nombre: '', correo: '', clave: 'manantial', rolId, sucursalId, telefono: '', activo: true,
+  nombre: '', correo: '', clave: 'manantial', rolId, sucursalId, sucursalesIds: [sucursalId], telefono: '', activo: true,
 })
 
 export function Seguridad() {
-  const { estado, sucursalActiva, puede, ejecutar } = useErp()
+  const { estado, sede, enVista, puede, ejecutar } = useErp()
   const [pestana, setPestana] = useState<'roles' | 'usuarios'>('roles')
   const [rolId, setRolId] = useState(estado.roles[0]?.id ?? '')
   const [filtroRol, setFiltroRol] = useState('todos')
@@ -62,9 +63,9 @@ export function Seguridad() {
     }
   }
 
-  const personas = estado.usuarios.filter((u) => u.rolId === rol?.id && (sucursalActiva === 'todas' || u.sucursalId === sucursalActiva))
+  const personas = estado.usuarios.filter((u) => u.rolId === rol?.id && sucursalesDe(u).some((id) => enVista(id)))
   const usuarios = estado.usuarios.filter((u) => {
-    if (sucursalActiva !== 'todas' && u.sucursalId !== sucursalActiva) return false
+    if (!sucursalesDe(u).some((id) => enVista(id))) return false
     if (filtroRol !== 'todos' && u.rolId !== filtroRol) return false
     const texto = `${u.nombre} ${u.correo}`.toLowerCase()
     return texto.includes(busqueda.toLowerCase())
@@ -73,10 +74,10 @@ export function Seguridad() {
   return (
     <Pagina
       titulo="Roles y usuarios"
-      detalle="El rol dice qué pantallas se abren. El usuario solo elige rol y sucursal."
+      detalle="El rol dice qué pantallas se abren. En el usuario marcás una sucursal o varias. El repartidor queda en una sola y un rol de empresa ve todas."
       accion={editar && (pestana === 'roles'
         ? <Boton onClick={() => { setRolId(''); setRol({ id: '', nombre: '', descripcion: '', alcance: 'sucursal', esRepartidor: false, sistema: false, opciones: ['dashboard.ver'] }) }}>Nuevo rol</Boton>
-        : <Boton onClick={() => setUsuario(vacioUsuario(estado.roles[0]?.id ?? '', estado.sucursales[0]?.id ?? ''))}>Nuevo usuario</Boton>)}
+        : <Boton onClick={() => setUsuario(vacioUsuario(estado.roles[0]?.id ?? '', sede || estado.sucursales[0]?.id || ''))}>Nuevo usuario</Boton>)}
     >
       <div className="flex gap-2">
         <Boton variante={pestana === 'roles' ? 'primario' : 'secundario'} onClick={() => setPestana('roles')}>Roles</Boton>
@@ -87,7 +88,7 @@ export function Seguridad() {
         <div className="grid items-start gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
           <div className="space-y-2 lg:sticky lg:top-3">
             {estado.roles.map((item) => {
-              const cantidad = estado.usuarios.filter((u) => u.rolId === item.id && (sucursalActiva === 'todas' || u.sucursalId === sucursalActiva)).length
+              const cantidad = estado.usuarios.filter((u) => u.rolId === item.id && sucursalesDe(u).some((id) => enVista(id))).length
               const activo = item.id === rol?.id
               return (
                 <button key={item.id} className={`w-full rounded px-3 py-2 text-left text-sm ${activo ? 'bg-[#083844] text-white' : 'bg-white'}`} onClick={() => elegirRol(item.id)}>
@@ -198,7 +199,7 @@ export function Seguridad() {
                 u.nombre,
                 u.correo,
                 <button key="r" className="text-left font-medium text-[#0b3a4a]" onClick={(e) => { e.stopPropagation(); elegirRol(u.rolId) }}>{estado.roles.find((r) => r.id === u.rolId)?.nombre}</button>,
-                estado.sucursales.find((s) => s.id === u.sucursalId)?.codigo,
+                estado.roles.find((r) => r.id === u.rolId)?.alcance === 'empresa' ? 'Todas' : sucursalesDe(u).map((id) => estado.sucursales.find((s) => s.id === id)?.codigo).filter(Boolean).join(', '),
                 <Badge key="e" tono={u.activo ? 'ok' : 'neutro'}>{u.activo ? 'Activo' : 'Inactivo'}</Badge>,
                 editar ? <Boton key="a" variante="secundario" onClick={(e) => { e.stopPropagation(); setUsuario(u) }}>Editar</Boton> : '',
               ],
@@ -217,15 +218,44 @@ export function Seguridad() {
             <Campo etiqueta="Nombre"><Texto value={usuario.nombre} onChange={(e) => setUsuario({ ...usuario, nombre: e.target.value })} required /></Campo>
             <Campo etiqueta="Correo"><Texto value={usuario.correo} onChange={(e) => setUsuario({ ...usuario, correo: e.target.value })} required /></Campo>
             <Campo etiqueta="Rol">
-              <Lista value={usuario.rolId} onChange={(e) => setUsuario({ ...usuario, rolId: e.target.value })}>
+              <Lista value={usuario.rolId} onChange={(e) => {
+                const rolId = e.target.value
+                const siguiente = estado.roles.find((r) => r.id === rolId)
+                const una = !siguiente || siguiente.esRepartidor || siguiente.alcance === 'empresa'
+                const sucursalesIds = una ? [usuario.sucursalId] : (usuario.sucursalesIds.length ? usuario.sucursalesIds : [usuario.sucursalId])
+                setUsuario({ ...usuario, rolId, sucursalesIds, sucursalId: sucursalesIds.includes(usuario.sucursalId) ? usuario.sucursalId : sucursalesIds[0] })
+              }}>
                 {estado.roles.map((r) => <option key={r.id} value={r.id}>{r.nombre}</option>)}
               </Lista>
             </Campo>
-            <Campo etiqueta="Sucursal">
-              <Lista value={usuario.sucursalId} onChange={(e) => setUsuario({ ...usuario, sucursalId: e.target.value })}>
-                {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-              </Lista>
-            </Campo>
+            {(!estado.roles.find((r) => r.id === usuario.rolId) || estado.roles.find((r) => r.id === usuario.rolId)?.esRepartidor || estado.roles.find((r) => r.id === usuario.rolId)?.alcance === 'empresa') ? (
+              <Campo etiqueta={estado.roles.find((r) => r.id === usuario.rolId)?.alcance === 'empresa' ? 'Sede' : 'Sucursal'}>
+                <Lista value={usuario.sucursalId} onChange={(e) => setUsuario({ ...usuario, sucursalId: e.target.value, sucursalesIds: [e.target.value] })}>
+                  {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                </Lista>
+                <span className="mt-1 block text-xs text-slate-500">{estado.roles.find((r) => r.id === usuario.rolId)?.esRepartidor ? 'El repartidor opera una sola sucursal.' : 'Este rol ve toda la empresa. La sede es la sucursal de referencia.'}</span>
+              </Campo>
+            ) : (
+              <fieldset className="sm:col-span-2">
+                <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Sucursales</legend>
+                <div className="flex flex-wrap gap-3">
+                  {estado.sucursales.map((s) => (
+                    <label key={s.id} className="flex items-center gap-2 text-sm">
+                      <input type="checkbox" checked={usuario.sucursalesIds.includes(s.id)} onChange={(e) => {
+                        const conjunto = new Set(usuario.sucursalesIds)
+                        if (e.target.checked) conjunto.add(s.id)
+                        else conjunto.delete(s.id)
+                        const sucursalesIds = estado.sucursales.map((item) => item.id).filter((id) => conjunto.has(id))
+                        if (!sucursalesIds.length) return
+                        setUsuario({ ...usuario, sucursalesIds, sucursalId: sucursalesIds.includes(usuario.sucursalId) ? usuario.sucursalId : sucursalesIds[0] })
+                      }} />
+                      {s.nombre}
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-slate-500">Con una entra directo a esa tienda. Con varias puede ver el general de las suyas y cambiar de vista.</p>
+              </fieldset>
+            )}
             <Campo etiqueta="Teléfono"><Texto value={usuario.telefono} onChange={(e) => setUsuario({ ...usuario, telefono: e.target.value })} /></Campo>
             <Campo etiqueta="Clave"><Texto value={usuario.clave} onChange={(e) => setUsuario({ ...usuario, clave: e.target.value })} /></Campo>
             <label className="flex items-center gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={usuario.activo} onChange={(e) => setUsuario({ ...usuario, activo: e.target.checked })} /> Puede entrar</label>

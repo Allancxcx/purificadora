@@ -14,8 +14,8 @@ interface LineaPos {
 }
 
 export function Pos() {
-  const { estado, sesion, sucursalActiva, verEmpresa, ejecutar, certificar, certificando } = useErp()
-  const [sucursalId, setSucursalId] = useState(sucursalActiva === 'todas' ? estado.sucursales.find((s) => s.esMatriz)?.id ?? estado.sucursales[0].id : sucursalActiva)
+  const { estado, sesion, sucursalActiva, permitidas, sede, ejecutar, certificar, certificando } = useErp()
+  const [sucursalId, setSucursalId] = useState(sede)
   useEffect(() => {
     if (sucursalActiva !== 'todas') setSucursalId(sucursalActiva)
   }, [sucursalActiva])
@@ -88,10 +88,10 @@ export function Pos() {
 
   return (
     <Pagina titulo="Punto de venta" detalle={`${sucursal?.nombre ?? 'Sucursal'} · el cobro certifica la factura y deja el asiento de caja o banco.`}>
-      {verEmpresa && (
+      {permitidas.length > 1 && (
         <Campo etiqueta="Sucursal del ticket">
           <Lista value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setCarrito([]) }}>
-            {estado.sucursales.filter((s) => s.activa).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+            {estado.sucursales.filter((s) => s.activa && permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
           </Lista>
         </Campo>
       )}

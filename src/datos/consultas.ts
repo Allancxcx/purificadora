@@ -1,6 +1,6 @@
 import { redondear, totalesVenta } from '../dominio/calculos'
 import { distanciaKm, interpolar, type Punto } from '../dominio/geo'
-import type { Estado, Factura, OrdenVenta, Ruta, SerieDocumento, TipoSerie } from '../dominio/tipos'
+import type { Estado, Factura, OrdenVenta, Ruta, SerieDocumento, TipoSerie, Usuario } from '../dominio/tipos'
 
 export function precioLista(estado: Estado, listaId: string | undefined, productoId: string): number {
   const item = listaId ? estado.precios.find((p) => p.listaId === listaId && p.productoId === productoId) : undefined
@@ -15,8 +15,14 @@ export function listaDelSocio(estado: Estado, socioId: string): string {
   return estado.listasPrecio.find((l) => l.esBase && l.activa)?.id ?? estado.listasPrecio.find((l) => l.activa)?.id ?? ''
 }
 
-export function deSucursal<T extends { sucursalId: string }>(lista: T[], sucursalId: string): T[] {
-  return sucursalId === 'todas' ? lista : lista.filter((item) => item.sucursalId === sucursalId)
+export function sucursalesDe(usuario: Pick<Usuario, 'sucursalId'> & { sucursalesIds?: string[] }): string[] {
+  const marcadas = [...new Set((usuario.sucursalesIds ?? []).filter(Boolean))]
+  return marcadas.length ? marcadas : (usuario.sucursalId ? [usuario.sucursalId] : [])
+}
+
+export function deSucursal<T extends { sucursalId: string }>(lista: T[], sucursalId: string, permitidas?: string[]): T[] {
+  const base = permitidas ? lista.filter((item) => permitidas.includes(item.sucursalId)) : lista
+  return sucursalId === 'todas' ? base : base.filter((item) => item.sucursalId === sucursalId)
 }
 
 export function folio(prefijo: string, numero: number): string {
@@ -35,10 +41,10 @@ export function stock(estado: Estado, sucursalId: string, productoId: string): n
   )
 }
 
-export function valorInventario(estado: Estado, sucursalId?: string): number {
+export function valorInventario(estado: Estado, sucursalId?: string, permitidas?: string[]): number {
   let total = 0
+  const sucursales = sucursalId && sucursalId !== 'todas' ? [sucursalId] : (permitidas ?? estado.sucursales.map((s) => s.id))
   for (const producto of estado.productos) {
-    const sucursales = sucursalId ? [sucursalId] : estado.sucursales.map((s) => s.id)
     for (const sucursal of sucursales) {
       total = redondear(total + redondear(stock(estado, sucursal, producto.id) * producto.costo))
     }
@@ -46,10 +52,11 @@ export function valorInventario(estado: Estado, sucursalId?: string): number {
   return total
 }
 
-export function saldoCuenta(estado: Estado, cuentaId: string, sucursalId?: string): number {
+export function saldoCuenta(estado: Estado, cuentaId: string, sucursalId?: string, permitidas?: string[]): number {
   let debe = 0
   let haber = 0
   for (const asiento of estado.asientos) {
+    if (permitidas && !permitidas.includes(asiento.sucursalId)) continue
     if (sucursalId && sucursalId !== 'todas' && asiento.sucursalId !== sucursalId) continue
     for (const linea of asiento.lineas) {
       if (linea.cuentaId !== cuentaId) continue
