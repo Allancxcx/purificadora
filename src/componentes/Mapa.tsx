@@ -20,19 +20,35 @@ function Ajustar() {
   return null
 }
 
+function puntoValido(lat: number, lng: number) {
+  return Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180 && !(lat === 0 && lng === 0)
+}
+
 function Encuadrar({ rutas, bodegas }: { rutas: { ruta: Ruta }[]; bodegas: { id: string; punto: Punto }[] }) {
   const mapa = useMap()
-  const clave = rutas.map((r) => r.ruta.id).join('|')
+  const clave = rutas.map((r) => `${r.ruta.id}:${r.ruta.paradas.length}`).join('|')
   useEffect(() => {
     const puntos: [number, number][] = []
     for (const { ruta } of rutas) {
       const bodega = bodegas.find((b) => b.id === ruta.sucursalId)
-      if (bodega) puntos.push([bodega.punto.lat, bodega.punto.lng])
-      for (const parada of ruta.paradas) puntos.push([parada.lat, parada.lng])
+      if (bodega && puntoValido(bodega.punto.lat, bodega.punto.lng)) puntos.push([bodega.punto.lat, bodega.punto.lng])
+      for (const parada of ruta.paradas) {
+        if (puntoValido(parada.lat, parada.lng)) puntos.push([parada.lat, parada.lng])
+      }
     }
-    if (puntos.length > 0) {
-      const id = window.setTimeout(() => mapa.fitBounds(puntos, { padding: [32, 32] }), 220)
-      return () => window.clearTimeout(id)
+    const encuadrar = () => {
+      const tamano = mapa.getSize()
+      if (tamano.x < 40 || tamano.y < 40 || puntos.length === 0) return
+      mapa.fitBounds(puntos, { padding: [28, 28], maxZoom: 14 })
+    }
+    const id = window.setTimeout(() => {
+      mapa.invalidateSize()
+      encuadrar()
+    }, 80)
+    mapa.on('resize', encuadrar)
+    return () => {
+      window.clearTimeout(id)
+      mapa.off('resize', encuadrar)
     }
   }, [mapa, clave])
   return null

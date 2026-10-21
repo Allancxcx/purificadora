@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useErp } from '../datos/store'
 import { crearRuta, iniciarRuta } from '../datos/motor'
-import { kilometrosRuta, ordenDespachable, posicionRepartidor } from '../datos/consultas'
+import { folio, kilometrosRuta, ordenDespachable, posicionRepartidor } from '../datos/consultas'
 import { distanciaKm } from '../dominio/geo'
 import { fechaGT } from '../dominio/formato'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta, Texto } from '../componentes/ui'
@@ -55,16 +55,16 @@ export function Rutas() {
 
   return (
     <Pagina titulo="Rutas en vivo" detalle="Si el repartidor activa el GPS en su teléfono, el punto es esa ubicación. Si no hay señal reciente, el mapa avanza solo hacia la siguiente parada." accion={puede('rutas.despachar') && <Boton onClick={() => setDespacho(true)}>Despachar</Boton>}>
-      <div className="grid h-[calc(100vh-11rem)] min-h-[560px] gap-3 lg:grid-cols-[320px_1fr]">
-        <div className="space-y-2 overflow-auto">
+      <div className="grid h-[calc(100vh-11rem)] min-h-[520px] min-w-0 gap-3 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-2 overflow-auto">
           {visibles.map((ruta) => {
             const nombre = estado.usuarios.find((u) => u.id === ruta.repartidorId)?.nombre
             const hechas = ruta.paradas.filter((p) => p.estado === 'entregada').length
             const bodega = estado.sucursales.find((s) => s.id === ruta.sucursalId)!
             return (
               <button key={ruta.id} className={`w-full rounded-md bg-white p-3 text-left ${elegida?.id === ruta.id ? 'ring-2 ring-cyan-700' : ''}`} onClick={() => setSeleccion(ruta.id)}>
-                <div className="flex items-center justify-between"><strong>{nombre}</strong><Badge tono={ruta.estado === 'en_curso' ? 'alerta' : ruta.estado === 'finalizada' ? 'ok' : 'neutro'}>{ruta.estado.replaceAll('_', ' ')}</Badge></div>
-                <div className="text-xs text-slate-500">{ruta.codigo} · {ruta.vehiculo} · {hechas}/{ruta.paradas.length} · {kilometrosRuta(ruta, bodega).toFixed(1)} km{ruta.gps && ahora - Date.parse(ruta.gps.en) < 90_000 ? ' · GPS del teléfono' : ''}</div>
+                <div className="flex items-start justify-between gap-2"><strong className="min-w-0">{nombre}</strong><Badge tono={ruta.estado === 'en_curso' ? 'alerta' : ruta.estado === 'finalizada' ? 'ok' : 'neutro'}>{ruta.estado.replaceAll('_', ' ')}</Badge></div>
+                <div className="mt-1 text-xs text-slate-500">{ruta.codigo} · {ruta.vehiculo} · {hechas}/{ruta.paradas.length} · {kilometrosRuta(ruta, bodega).toFixed(1)} km{ruta.gps && ahora - Date.parse(ruta.gps.en) < 90_000 ? ' · GPS del teléfono' : ''}</div>
               </button>
             )
           })}
@@ -77,8 +77,8 @@ export function Rutas() {
                   const origen = i === 0 ? bodega : elegida.paradas[i - 1]
                   return (
                     <li key={p.id}>
-                      <div className="font-medium">{i + 1}. {p.nombre}</div>
-                      <div className="text-xs text-slate-500">{p.estado.replaceAll('_', ' ')} · {distanciaKm(origen, p).toFixed(1)} km · {p.resumen}</div>
+                      <div className="font-medium break-words">{i + 1}. {p.nombre}</div>
+                      <div className="break-words text-xs text-slate-500">{p.estado.replaceAll('_', ' ')} · {distanciaKm(origen, p).toFixed(1)} km · {p.resumen}</div>
                       {p.incidencia && <div className="text-xs text-rose-700">{p.incidencia}</div>}
                     </li>
                   )
@@ -87,11 +87,11 @@ export function Rutas() {
             </Tarjeta>
           )}
         </div>
-        <div className="h-full min-h-[480px] overflow-hidden rounded-md">
+        <div className="relative z-0 h-full min-h-[420px] min-w-0 overflow-hidden rounded-md">
           <MapaRutas rutas={mapa} bodegas={estado.sucursales.map((s) => ({ id: s.id, nombre: s.nombre, punto: s }))} posiciones={posiciones} seleccionada={elegida?.id} onSeleccionar={setSeleccion} />
         </div>
       </div>
-      <Modal titulo="Armar ruta" abierto={despacho} onCerrar={() => setDespacho(false)}>
+      <Modal titulo="Armar ruta" abierto={despacho} onCerrar={() => setDespacho(false)} ancho="max-w-lg">
         <form className="space-y-3" onSubmit={armar}>
           <Campo etiqueta="Sucursal">
             <Lista value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setOrdenes([]); setRepartidorId('') }}>
@@ -105,13 +105,13 @@ export function Rutas() {
             </Lista>
           </Campo>
           <Campo etiqueta="Vehículo"><Texto value={vehiculo} onChange={(e) => setVehiculo(e.target.value)} /></Campo>
-          <div className="space-y-2">
+          <div className="max-h-64 space-y-2 overflow-auto">
             {disponibles.map((orden) => {
               const serie = estado.series.find((s) => s.id === orden.serieId)
               return (
-                <label key={orden.id} className="flex gap-2 rounded bg-slate-50 px-3 py-2 text-sm">
-                  <input type="checkbox" checked={ordenes.includes(orden.id)} onChange={(e) => setOrdenes(e.target.checked ? [...ordenes, orden.id] : ordenes.filter((id) => id !== orden.id))} />
-                  <span>{serie?.prefijo}-{orden.numero} · {estado.socios.find((s) => s.id === orden.socioId)?.nombre}<br /><span className="text-xs text-slate-500">{orden.direccionEntrega}</span></span>
+                <label key={orden.id} className="flex min-w-0 gap-2 rounded bg-slate-50 px-3 py-2 text-sm">
+                  <input className="mt-1" type="checkbox" checked={ordenes.includes(orden.id)} onChange={(e) => setOrdenes(e.target.checked ? [...ordenes, orden.id] : ordenes.filter((id) => id !== orden.id))} />
+                  <span className="min-w-0 break-words">{folio(serie?.prefijo ?? 'OV', orden.numero)} · {estado.socios.find((s) => s.id === orden.socioId)?.nombre}<br /><span className="text-xs text-slate-500">{orden.direccionEntrega}</span></span>
                 </label>
               )
             })}

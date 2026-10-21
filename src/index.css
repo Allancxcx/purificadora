@@ -17,7 +17,7 @@ button { cursor: pointer; }
 }
 .pulso { animation: pulso 1.8s ease-out infinite; }
 
-.leaflet-container { font-family: Outfit, "Segoe UI", sans-serif; background: #d5e4e4; height: 100%; width: 100%; }
+.leaflet-container { position: relative; z-index: 0; font-family: Outfit, "Segoe UI", sans-serif; background: #d5e4e4; height: 100%; width: 100%; }
 
 @media print {
   body * { visibility: hidden; }

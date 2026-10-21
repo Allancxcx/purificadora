@@ -54,7 +54,7 @@ export function Badge({ tono = 'neutro', children }: { tono?: keyof typeof tonos
 export function Modal({ titulo, abierto, onCerrar, children, ancho = 'max-w-2xl' }: { titulo: string; abierto: boolean; onCerrar: () => void; children: ReactNode; ancho?: string }) {
   if (!abierto) return null
   return (
-    <div className="no-imprimir fixed inset-0 z-50 flex items-end justify-center bg-[#102027]/45 p-3 sm:items-center">
+    <div className="no-imprimir fixed inset-0 z-[1100] flex items-end justify-center bg-[#102027]/45 p-3 sm:items-center">
       <div className={cx('max-h-[92vh] w-full overflow-auto rounded-md border border-[#d5dde2] bg-white p-4 shadow-xl', ancho)}>
         <div className="mb-4 flex items-start justify-between gap-4 border-b border-[#e6ebef] pb-3">
           <h2 className="text-lg font-semibold text-[#102027]">{titulo}</h2>
