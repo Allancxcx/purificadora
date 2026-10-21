@@ -101,7 +101,7 @@ export function Rutas() {
           )}
         </div>
         <div className="relative z-0 h-full min-h-[420px] min-w-0 overflow-hidden rounded-md">
-          <MapaRutas rutas={mapa} bodegas={estado.sucursales.map((s) => ({ id: s.id, nombre: s.nombre, punto: s }))} posiciones={posiciones} seleccionada={elegida?.id} onSeleccionar={setSeleccion} />
+          <MapaRutas rutas={mapa} bodegas={estado.sucursales.map((s) => ({ id: s.id, nombre: s.nombre, punto: s, matriz: s.esMatriz }))} posiciones={posiciones} seleccionada={elegida?.id} onSeleccionar={setSeleccion} />
         </div>
       </div>
       <Modal titulo="Armar ruta" abierto={despacho} onCerrar={() => setDespacho(false)} ancho="max-w-lg">

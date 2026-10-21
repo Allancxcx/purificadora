@@ -152,7 +152,7 @@ export function Reparto() {
                 <div className="h-52 overflow-hidden rounded-md">
                   <MapaRutas
                     rutas={[{ ruta, color: '#0e7490', repartidor: estado.usuarios.find((u) => u.id === ruta.repartidorId)?.nombre ?? '' }]}
-                    bodegas={[{ id: sucursal.id, nombre: sucursal.nombre, punto: sucursal }]}
+                    bodegas={[{ id: sucursal.id, nombre: sucursal.nombre, punto: sucursal, matriz: sucursal.esMatriz }]}
                     posiciones={[{ rutaId: ruta.id, punto: gps === 'activo' && ultimoGps.current.t ? { lat: ultimoGps.current.lat, lng: ultimoGps.current.lng } : posicionRepartidor(ruta, sucursal, ahora) }]}
                     seleccionada={ruta.id}
                     onSeleccionar={() => undefined}

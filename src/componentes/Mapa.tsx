@@ -54,6 +54,18 @@ function Encuadrar({ rutas, bodegas }: { rutas: { ruta: Ruta }[]; bodegas: { id:
   return null
 }
 
+function iconoCentral() {
+  return L.divIcon({
+    className: 'border-0 bg-transparent',
+    iconSize: [72, 46],
+    iconAnchor: [36, 42],
+    html: `<div style="display:flex;flex-direction:column;align-items:center;width:72px">
+      <span style="background:#083844;color:white;font-size:11px;font-weight:700;line-height:1;padding:4px 8px;border-radius:4px;box-shadow:0 6px 16px rgba(8,56,68,.35)">Central</span>
+      <span style="width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-top:9px solid #083844"></span>
+    </div>`,
+  })
+}
+
 function iconoRepartidor(iniciales: string, color: string, activo: boolean) {
   return L.divIcon({
     className: 'border-0 bg-transparent',
@@ -76,7 +88,7 @@ const COLOR_PARADA: Record<string, string> = {
 
 export function MapaRutas({ rutas, bodegas, posiciones, seleccionada, onSeleccionar }: {
   rutas: { ruta: Ruta; color: string; repartidor: string }[]
-  bodegas: { id: string; nombre: string; punto: Punto }[]
+  bodegas: { id: string; nombre: string; punto: Punto; matriz?: boolean }[]
   posiciones: { rutaId: string; punto: Punto }[]
   seleccionada?: string
   onSeleccionar: (id: string) => void
@@ -86,7 +98,11 @@ export function MapaRutas({ rutas, bodegas, posiciones, seleccionada, onSeleccio
       <Ajustar />
       <Encuadrar rutas={rutas} bodegas={bodegas} />
       <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-      {bodegas.map((b) => (
+      {bodegas.map((b) => b.matriz ? (
+        <Marker key={b.id} position={[b.punto.lat, b.punto.lng]} icon={iconoCentral()} zIndexOffset={500}>
+          <Popup><strong>Sucursal central</strong><br />{b.nombre}</Popup>
+        </Marker>
+      ) : (
         <CircleMarker key={b.id} center={[b.punto.lat, b.punto.lng]} radius={7} pathOptions={{ color: '#083844', fillColor: '#67e8f9', fillOpacity: 1 }}>
           <Popup>{b.nombre}</Popup>
         </CircleMarker>
