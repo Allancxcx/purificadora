@@ -55,16 +55,21 @@ export function Compras() {
               {proveedores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Lista>
           </Campo>
+          <div className="grid grid-cols-[1.4fr_80px_100px] gap-2 text-xs font-semibold text-[#5c6770]">
+            <span>Producto</span>
+            <span>Cantidad</span>
+            <span>Costo Q</span>
+          </div>
           {lineas.map((linea, indice) => (
             <div key={indice} className="grid grid-cols-[1.4fr_80px_100px] gap-2">
-              <Lista value={linea.productoId} onChange={(e) => {
+              <Lista aria-label="Producto" value={linea.productoId} onChange={(e) => {
                 const producto = productos.find((p) => p.id === e.target.value)
                 setLineas(lineas.map((l, i) => i === indice ? { ...l, productoId: e.target.value, costoUnitario: producto?.costo ?? l.costoUnitario } : l))
               }}>
                 {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </Lista>
-              <Texto type="number" min={1} value={linea.cantidad} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cantidad: Number(e.target.value) } : l))} />
-              <Texto type="number" step="0.01" value={linea.costoUnitario} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, costoUnitario: Number(e.target.value) } : l))} />
+              <Texto aria-label="Cantidad" type="number" min={1} value={linea.cantidad} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cantidad: Number(e.target.value) } : l))} />
+              <Texto aria-label="Costo unitario" type="number" step="0.01" value={linea.costoUnitario} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, costoUnitario: Number(e.target.value) } : l))} />
             </div>
           ))}
           <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, costoUnitario: productos[0].costo }])}>Agregar línea</Boton>

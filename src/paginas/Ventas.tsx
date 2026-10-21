@@ -83,17 +83,24 @@ export function Ventas() {
           </Campo>
           <Campo etiqueta="Dirección de entrega"><Texto value={direccion} onChange={(e) => setDireccion(e.target.value)} /></Campo>
           <Campo etiqueta="Ventana"><Texto value={ventana} onChange={(e) => setVentana(e.target.value)} /></Campo>
+          <p className="text-xs text-[#5c6770]">El precio incluye IVA. El descuento se resta en quetzales.</p>
+          <div className="grid grid-cols-[minmax(0,1.4fr)_4.5rem_5.5rem_5.5rem] gap-2 text-xs font-semibold text-[#5c6770]">
+            <span>Producto</span>
+            <span>Cant.</span>
+            <span>Precio</span>
+            <span>Desc.</span>
+          </div>
           {lineas.map((linea, indice) => (
-            <div key={indice} className="grid grid-cols-[1.4fr_70px_90px_90px] gap-2">
-              <Lista value={linea.productoId} onChange={(e) => {
+            <div key={indice} className="grid grid-cols-[minmax(0,1.4fr)_4.5rem_5.5rem_5.5rem] gap-2">
+              <Lista aria-label="Producto" value={linea.productoId} onChange={(e) => {
                 const producto = productos.find((p) => p.id === e.target.value)
                 setLineas(lineas.map((l, i) => i === indice ? { ...l, productoId: e.target.value, precioUnitario: producto?.precio ?? l.precioUnitario } : l))
               }}>
                 {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </Lista>
-              <Texto type="number" min={1} value={linea.cantidad} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cantidad: Number(e.target.value) } : l))} />
-              <Texto type="number" step="0.01" value={linea.precioUnitario} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, precioUnitario: Number(e.target.value) } : l))} />
-              <Texto type="number" step="0.01" value={linea.descuento} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, descuento: Number(e.target.value) } : l))} />
+              <Texto aria-label="Cantidad" type="number" min={1} value={linea.cantidad} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cantidad: Number(e.target.value) } : l))} />
+              <Texto aria-label="Precio unitario" type="number" step="0.01" value={linea.precioUnitario} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, precioUnitario: Number(e.target.value) } : l))} />
+              <Texto aria-label="Descuento" type="number" step="0.01" value={linea.descuento} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, descuento: Number(e.target.value) } : l))} />
             </div>
           ))}
           <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, precioUnitario: productos[0].precio, descuento: 0 }])}>Agregar línea</Boton>
