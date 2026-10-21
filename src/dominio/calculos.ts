@@ -87,6 +87,7 @@ export const CTA = {
   clientes: '1201',
   ivaCredito: '1202',
   inventario: '1301',
+  flota: '1501',
   proveedores: '2101',
   ivaDebito: '2102',
   capital: '3101',

@@ -1,6 +1,6 @@
 import { useCallback, useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BookOpen, Building2, Droplets, FileText, Hash, KeyRound, Landmark, LayoutDashboard, Map, Menu, Package, ShieldCheck, ShoppingBag, Store, Truck, Users, X } from 'lucide-react'
+import { BookOpen, Building2, Car, Droplets, FileText, Hash, KeyRound, Landmark, LayoutDashboard, Map, Menu, Package, ShieldCheck, ShoppingBag, Store, Tags, Truck, Users, X } from 'lucide-react'
 import { useErp } from '../datos/store'
 import { Boton, cx } from './ui'
 import { Tour, type PasoTour } from './Tour'
@@ -10,6 +10,8 @@ const PASOS: PasoTour[] = [
   { selector: '[data-tour="menu"]', titulo: 'Menú', texto: 'Cada opción depende del rol. El punto de venta cobra en mostrador. Facturas maneja abierta, cerrada y cancelada.' },
   { selector: '[data-tour="nav-facturas"]', titulo: 'Facturas', texto: 'Abierta cuando se crea. Cerrada al certificar. Si sigue abierta, se cancela aquí. Si ya está cerrada, la anula el certificador o una nota de crédito. La nota de débito solo aumenta lo que debe el cliente.' },
   { selector: '[data-tour="nav-contabilidad"]', titulo: 'Libros', texto: 'El diario, el mayor y los estados salen de los mismos asientos. En cada grilla podés elegir columnas, orden y cuántas filas ver.' },
+  { selector: '[data-tour="nav-precios"]', titulo: 'Listas de precios', texto: 'Al armar el pedido, el precio de cada producto sale de la lista del cliente. En la línea todavía lo podés cambiar.' },
+  { selector: '[data-tour="nav-activos"]', titulo: 'Flota', texto: 'Los vehículos son activos fijos. Al despachar se elige uno que esté disponible en la sucursal.' },
   { selector: '[data-tour="sucursal"]', titulo: 'Sucursal', texto: 'Si tu rol ve toda la empresa, este filtro cambia los documentos de la pantalla. Cada sucursal tiene sus series.' },
   { selector: '[data-tour="guia"]', titulo: 'Esta guía', texto: 'Podés volver a abrirla cuando quieras. Es una aplicación instalable: en el teléfono, desde el navegador, se agrega a la pantalla de inicio.' },
 ]
@@ -18,11 +20,13 @@ const NAV = [
   { to: '/', codigo: 'dashboard.ver', label: 'Tablero', icon: LayoutDashboard, fin: true },
   { to: '/socios', codigo: 'socios.ver', label: 'Socios', icon: Users, fin: false },
   { to: '/ventas', codigo: 'ventas.ver', label: 'Ventas', icon: ShoppingBag, fin: false },
+  { to: '/precios', codigo: 'precios.ver', label: 'Listas de precios', icon: Tags, fin: false },
   { to: '/pos', codigo: 'pos.operar', label: 'Punto de venta', icon: Store, fin: false },
   { to: '/compras', codigo: 'compras.ver', label: 'Compras', icon: Truck, fin: false },
   { to: '/facturas', codigo: 'facturas.ver', label: 'Facturas', icon: FileText, fin: false },
   { to: '/inventario', codigo: 'inventario.ver', label: 'Inventario', icon: Package, fin: false },
   { to: '/contabilidad', codigo: 'contabilidad.ver', label: 'Contabilidad', icon: BookOpen, fin: false },
+  { to: '/activos', codigo: 'activos.ver', label: 'Activos', icon: Car, fin: false },
   { to: '/rutas', codigo: 'rutas.ver', label: 'Rutas en vivo', icon: Map, fin: false },
   { to: '/sucursales', codigo: 'sucursales.ver', label: 'Sucursales', icon: Building2, fin: false },
   { to: '/series', codigo: 'series.ver', label: 'Series', icon: Hash, fin: false },
@@ -100,7 +104,7 @@ export function Shell() {
         </header>
         <main className="px-3 py-4 lg:px-5"><Outlet /></main>
       </div>
-      <Tour pasos={PASOS.filter((paso) => paso.selector !== '[data-tour="nav-facturas"]' || puede('facturas.ver')).filter((paso) => paso.selector !== '[data-tour="nav-contabilidad"]' || puede('contabilidad.ver'))} abierto={tour} onCerrar={cerrarTour} onPreparar={prepararTour} />
+      <Tour pasos={PASOS.filter((paso) => paso.selector !== '[data-tour="nav-facturas"]' || puede('facturas.ver')).filter((paso) => paso.selector !== '[data-tour="nav-contabilidad"]' || puede('contabilidad.ver')).filter((paso) => paso.selector !== '[data-tour="nav-precios"]' || puede('precios.ver')).filter((paso) => paso.selector !== '[data-tour="nav-activos"]' || puede('activos.ver'))} abierto={tour} onCerrar={cerrarTour} onPreparar={prepararTour} />
     </div>
   )
 }

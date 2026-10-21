@@ -2,6 +2,19 @@ import { redondear, totalesVenta } from '../dominio/calculos'
 import { distanciaKm, interpolar, type Punto } from '../dominio/geo'
 import type { Estado, Factura, OrdenVenta, Ruta, SerieDocumento, TipoSerie } from '../dominio/tipos'
 
+export function precioLista(estado: Estado, listaId: string | undefined, productoId: string): number {
+  const item = listaId ? estado.precios.find((p) => p.listaId === listaId && p.productoId === productoId) : undefined
+  if (item) return item.precio
+  return estado.productos.find((p) => p.id === productoId)?.precio ?? 0
+}
+
+export function listaDelSocio(estado: Estado, socioId: string): string {
+  const socio = estado.socios.find((s) => s.id === socioId)
+  const asignada = estado.listasPrecio.find((l) => l.id === socio?.listaPrecioId && l.activa)
+  if (asignada) return asignada.id
+  return estado.listasPrecio.find((l) => l.esBase && l.activa)?.id ?? estado.listasPrecio.find((l) => l.activa)?.id ?? ''
+}
+
 export function folio(prefijo: string, numero: number): string {
   return `${prefijo}-${String(numero).padStart(6, '0')}`
 }

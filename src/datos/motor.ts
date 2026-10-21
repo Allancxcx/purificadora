@@ -19,8 +19,10 @@ import type {
   Sucursal,
   TipoSerie,
   Usuario,
+  Vehiculo,
 } from '../dominio/tipos'
-import { facturaVigente, serieActiva, stock } from './consultas'
+import { flotaInicial, listasIniciales } from './catalogos'
+import { facturaVigente, saldoCuenta, serieActiva, stock } from './consultas'
 
 export type Resultado =
   | { ok: true; estado: Estado; id?: string; aviso?: string }
@@ -151,6 +153,7 @@ export function cargarSaldosIniciales(entrada: Estado, cargas: CargaInicial[], b
       concepto: 'Saldo inicial',
     })
   }
+  const flota = redondear((estado.vehiculos ?? []).reduce((suma, vehiculo) => suma + vehiculo.valor, 0))
   const asiento = registrarAsiento(estado, {
     fecha: '2026-01-02',
     descripcion: 'Apertura del ejercicio de demostración',
@@ -159,7 +162,8 @@ export function cargarSaldosIniciales(entrada: Estado, cargas: CargaInicial[], b
     lineas: [
       { cuentaId: CTA.bancos, detalle: 'Saldo en bancos', debe: bancos, haber: 0 },
       { cuentaId: CTA.inventario, detalle: 'Inventario inicial a costo estándar', debe: valor, haber: 0 },
-      { cuentaId: CTA.capital, detalle: 'Capital', debe: 0, haber: redondear(bancos + valor) },
+      ...(flota > 0 ? [{ cuentaId: CTA.flota, detalle: 'Flota a costo de adquisición', debe: flota, haber: 0 }] : []),
+      { cuentaId: CTA.capital, detalle: 'Capital', debe: 0, haber: redondear(bancos + valor + flota) },
     ],
   })
   if ('error' in asiento) return { ok: false, error: asiento.error }
@@ -173,14 +177,17 @@ export function guardarSocio(entrada: Estado, input: Omit<Socio, 'id' | 'codigo'
   if (input.roles.length === 0) return { ok: false, error: 'Indicá si es cliente, proveedor, lead o una combinación.' }
   const repetido = estado.socios.find((s) => nitLimpio(s.nit) === nitLimpio(input.nit) && s.id !== input.id && nitLimpio(input.nit) !== 'CF')
   if (repetido) return { ok: false, error: 'Ya existe un socio con ese NIT.' }
+  const listaPrecioId = input.listaPrecioId || undefined
+  if (listaPrecioId && !estado.listasPrecio.some((l) => l.id === listaPrecioId)) return { ok: false, error: 'Esa lista de precios no existe.' }
+  const socioInput = { ...input, listaPrecioId }
   if (input.id) {
     const actual = estado.socios.find((s) => s.id === input.id)
     if (!actual) return { ok: false, error: 'No encontré el socio.' }
-    Object.assign(actual, input, { codigo: actual.codigo })
+    Object.assign(actual, socioInput, { codigo: actual.codigo })
     return { ok: true, estado, id: actual.id, aviso: 'Socio actualizado' }
   }
   const consecutivo = estado.socios.reduce((max, s) => Math.max(max, Number(s.codigo.replace(/\D/g, '')) || 0), 0) + 1
-  const socio: Socio = { ...input, id: nid('soc'), codigo: `SN-${String(consecutivo).padStart(4, '0')}` }
+  const socio: Socio = { ...socioInput, id: nid('soc'), codigo: `SN-${String(consecutivo).padStart(4, '0')}` }
   estado.socios.unshift(socio)
   return { ok: true, estado, id: socio.id, aviso: `Socio ${socio.codigo} creado` }
 }
@@ -310,6 +317,7 @@ export interface NuevaVenta {
   notas: string
   fecha?: string
   confirmar: boolean
+  listaPrecioId?: string
   lineas: { productoId: string; cantidad: number; precioUnitario: number; descuento: number }[]
 }
 
@@ -364,6 +372,7 @@ export function crearOrdenVenta(entrada: Estado, input: NuevaVenta): Resultado {
     lng: input.lng,
     ventana: input.ventana || '08:00–12:00',
     notas: input.notas,
+    listaPrecioId: estado.listasPrecio.some((l) => l.id === input.listaPrecioId) ? input.listaPrecioId : undefined,
     lineas,
     origenInventario: null,
   }
@@ -776,7 +785,8 @@ export function registrarCobro(entrada: Estado, facturaId: string, monto: number
 export interface NuevaRuta {
   sucursalId: string
   repartidorId: string
-  vehiculo: string
+  vehiculoId?: string
+  vehiculo?: string
   ordenIds: string[]
   cargas?: { ordenId: string; lineas: { lineaId: string; cantidad: number }[] }[]
   fecha?: string
@@ -792,6 +802,12 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
   if (estado.rutas.some((r) => r.repartidorId === repartidor.id && r.estado !== 'finalizada')) {
     return { ok: false, error: 'Ese repartidor ya tiene una ruta abierta.' }
   }
+  const textoVehiculo = input.vehiculo?.trim() ?? ''
+  const vehiculo = estado.vehiculos.find((v) => v.id === input.vehiculoId)
+    ?? estado.vehiculos.find((v) => v.nombre === textoVehiculo || `${v.nombre} · ${v.placa}` === textoVehiculo)
+  if (estado.vehiculos.length > 0 && !vehiculo) return { ok: false, error: 'Elegí un vehículo del catálogo de activos.' }
+  if (vehiculo && vehiculo.sucursalId !== input.sucursalId) return { ok: false, error: 'Ese vehículo pertenece a otra sucursal.' }
+  if (vehiculo && vehiculo.estado !== 'disponible') return { ok: false, error: 'Ese vehículo no está disponible.' }
   const paradas = []
   for (const ordenId of input.ordenIds) {
     const orden = estado.ordenesVenta.find((o) => o.id === ordenId)
@@ -844,10 +860,12 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
     fecha: input.fecha ?? fechaGT(),
     sucursalId: input.sucursalId,
     repartidorId: repartidor.id,
-    vehiculo: input.vehiculo.trim() || 'Panel',
+    vehiculoId: vehiculo?.id,
+    vehiculo: vehiculo ? `${vehiculo.nombre} · ${vehiculo.placa}` : (textoVehiculo || 'Panel'),
     estado: 'planificada' as const,
     paradas,
   }
+  if (vehiculo) vehiculo.estado = 'en_ruta'
   estado.rutas.unshift(ruta)
   return { ok: true, estado, id: ruta.id, aviso: `Ruta ${codigo} armada. El camión todavía no ha salido.` }
 }
@@ -909,9 +927,13 @@ export function reportarGps(entrada: Estado, rutaId: string, lat: number, lng: n
   return { ok: true, estado }
 }
 
-function cerrarSiTermina(ruta: Estado['rutas'][number]) {
+function cerrarSiTermina(estado: Estado, ruta: Estado['rutas'][number]) {
   const abiertas = ruta.paradas.some((p) => p.estado === 'pendiente' || p.estado === 'en_camino' || p.estado === 'llegada')
-  if (!abiertas) ruta.estado = 'finalizada'
+  if (abiertas) return
+  ruta.estado = 'finalizada'
+  const vehiculo = estado.vehiculos.find((v) => v.id === ruta.vehiculoId)
+  const otra = estado.rutas.some((otraRuta) => otraRuta.id !== ruta.id && otraRuta.vehiculoId === ruta.vehiculoId && otraRuta.estado !== 'finalizada')
+  if (vehiculo && vehiculo.estado === 'en_ruta' && !otra) vehiculo.estado = 'disponible'
 }
 
 export function marcarParada(entrada: Estado, rutaId: string, paradaId: string, accion: 'llegada' | 'entregada' | 'incidencia', motivo = ''): Resultado {
@@ -966,7 +988,7 @@ export function marcarParada(entrada: Estado, rutaId: string, paradaId: string, 
     siguiente.estado = 'en_camino'
     ruta.legStartedAt = new Date().toISOString()
   }
-  cerrarSiTermina(ruta)
+  cerrarSiTermina(estado, ruta)
   return { ok: true, estado, aviso: accion === 'entregada' ? 'Entrega registrada' : 'Incidencia registrada. La orden volvió a confirmarse.' }
 }
 
@@ -1077,4 +1099,146 @@ export function registrarVentaPos(entrada: Estado, input: VentaPos): Resultado {
   const factura = emitirFactura(entrega.estado, venta.id)
   if (!factura.ok) return factura
   return { ok: true, estado: factura.estado, id: factura.id, aviso: 'Ticket armado. Falta la certificación para cobrar.' }
+}
+
+export function guardarVehiculo(entrada: Estado, input: { id?: string; placa: string; nombre: string; sucursalId: string; anio: number; valor: number; estado?: Vehiculo['estado'] }): Resultado {
+  const estado = clonar(entrada)
+  const placa = input.placa.trim().toUpperCase()
+  const nombre = input.nombre.trim()
+  if (placa.length < 5) return { ok: false, error: 'La placa es muy corta.' }
+  if (nombre.length < 3) return { ok: false, error: 'El vehículo necesita un nombre.' }
+  if (!estado.sucursales.some((s) => s.id === input.sucursalId)) return { ok: false, error: 'Elegí la sucursal del vehículo.' }
+  if (input.anio < 1995 || input.anio > 2027) return { ok: false, error: 'El año del vehículo no es válido.' }
+  if (estado.vehiculos.some((v) => v.placa === placa && v.id !== input.id)) return { ok: false, error: 'Esa placa ya está en la flota.' }
+  if (input.id) {
+    const actual = estado.vehiculos.find((v) => v.id === input.id)
+    if (!actual) return { ok: false, error: 'No encontré el vehículo.' }
+    const ocupado = estado.rutas.some((r) => r.vehiculoId === actual.id && r.estado !== 'finalizada')
+    const estadoNuevo = input.estado ?? actual.estado
+    if (estadoNuevo === 'en_ruta' && !ocupado) return { ok: false, error: 'En ruta lo asigna el despacho.' }
+    if (ocupado && estadoNuevo !== 'en_ruta') return { ok: false, error: 'Ese vehículo tiene una ruta abierta.' }
+    if (input.sucursalId !== actual.sucursalId && ocupado) return { ok: false, error: 'No se cambia de sucursal mientras tiene ruta.' }
+    actual.placa = placa
+    actual.nombre = nombre
+    actual.sucursalId = input.sucursalId
+    actual.anio = input.anio
+    actual.estado = ocupado ? 'en_ruta' : estadoNuevo
+    const ruta = estado.rutas.find((r) => r.vehiculoId === actual.id && r.estado !== 'finalizada')
+    if (ruta) ruta.vehiculo = `${actual.nombre} · ${actual.placa}`
+    return { ok: true, estado, id: actual.id, aviso: 'Vehículo actualizado' }
+  }
+  const valor = redondear(input.valor)
+  if (valor < 0) return { ok: false, error: 'El valor de adquisición no puede ser negativo.' }
+  if (valor > 0 && saldoCuenta(estado, CTA.bancos) + 0.001 < valor) return { ok: false, error: 'No hay saldo en bancos para esa adquisición.' }
+  const consecutivo = estado.vehiculos.reduce((max, v) => Math.max(max, Number(v.codigo.replace(/\D/g, '')) || 0), 0) + 1
+  const creado: Vehiculo = {
+    id: nid('veh'),
+    codigo: `VEH-${String(consecutivo).padStart(4, '0')}`,
+    placa,
+    nombre,
+    sucursalId: input.sucursalId,
+    anio: input.anio,
+    valor,
+    estado: 'disponible',
+  }
+  if (valor > 0) {
+    const asiento = registrarAsiento(estado, {
+      fecha: fechaGT(),
+      descripcion: `Alta de activo ${nombre} ${placa}`,
+      origen: 'activo',
+      sucursalId: input.sucursalId,
+      lineas: [
+        { cuentaId: CTA.flota, detalle: nombre, debe: valor, haber: 0 },
+        { cuentaId: CTA.bancos, detalle: 'Pago de la flota', debe: 0, haber: valor },
+      ],
+    })
+    if ('error' in asiento) return { ok: false, error: asiento.error }
+  }
+  estado.vehiculos.push(creado)
+  return { ok: true, estado, id: creado.id, aviso: `${creado.codigo} quedó en la cuenta 1501` }
+}
+
+export function guardarLista(entrada: Estado, input: { id?: string; nombre: string; activa?: boolean }): Resultado {
+  const estado = clonar(entrada)
+  const nombre = input.nombre.trim()
+  if (nombre.length < 3) return { ok: false, error: 'La lista necesita un nombre.' }
+  if (input.id) {
+    const actual = estado.listasPrecio.find((l) => l.id === input.id)
+    if (!actual) return { ok: false, error: 'No encontré la lista.' }
+    if (actual.esBase && input.activa === false) return { ok: false, error: 'La lista general se mantiene activa.' }
+    actual.nombre = nombre
+    if (input.activa !== undefined && !actual.esBase) actual.activa = input.activa
+    return { ok: true, estado, id: actual.id, aviso: 'Lista actualizada' }
+  }
+  const codigo = nombre.normalize('NFD').replace(/\p{Diacritic}/gu, '').replace(/[^a-zA-Z0-9]+/g, '').toUpperCase().slice(0, 12) || 'LISTA'
+  if (estado.listasPrecio.some((l) => l.codigo === codigo)) return { ok: false, error: 'Ya hay una lista con ese código.' }
+  const lista = { id: nid('lis'), codigo, nombre, activa: true, esBase: false }
+  estado.listasPrecio.push(lista)
+  const base = estado.listasPrecio.find((l) => l.esBase)
+  for (const producto of estado.productos) {
+    const referencia = estado.precios.find((p) => p.listaId === base?.id && p.productoId === producto.id)
+    estado.precios.push({ id: nid('px'), listaId: lista.id, productoId: producto.id, precio: referencia?.precio ?? producto.precio })
+  }
+  return { ok: true, estado, id: lista.id, aviso: `Lista ${lista.nombre} creada` }
+}
+
+export function guardarPrecios(entrada: Estado, listaId: string, items: { productoId: string; precio: number }[]): Resultado {
+  const estado = clonar(entrada)
+  const lista = estado.listasPrecio.find((l) => l.id === listaId)
+  if (!lista) return { ok: false, error: 'No encontré la lista.' }
+  for (const item of items) {
+    if (!(item.precio >= 0)) return { ok: false, error: 'El precio no puede ser negativo.' }
+    if (!estado.productos.some((p) => p.id === item.productoId)) return { ok: false, error: 'Hay un producto que no existe.' }
+    const actual = estado.precios.find((p) => p.listaId === lista.id && p.productoId === item.productoId)
+    if (actual) actual.precio = redondear(item.precio)
+    else estado.precios.push({ id: nid('px'), listaId: lista.id, productoId: item.productoId, precio: redondear(item.precio) })
+  }
+  return { ok: true, estado, id: lista.id, aviso: `Precios de ${lista.nombre} guardados` }
+}
+
+export function completarCatalogos(entrada: Estado): Estado {
+  const estado = clonar(entrada)
+  if (!estado.cuentas.some((c) => c.id === CTA.flota)) {
+    const inventario = estado.cuentas.findIndex((c) => c.id === CTA.inventario)
+    const cuenta = { id: CTA.flota, codigo: CTA.flota, nombre: 'Activos fijos — flota', tipo: 'activo' as const }
+    if (inventario >= 0) estado.cuentas.splice(inventario + 1, 0, cuenta)
+    else estado.cuentas.push(cuenta)
+  }
+  if (!estado.vehiculos?.length) estado.vehiculos = flotaInicial()
+  if (!estado.listasPrecio?.length || !estado.precios?.length) {
+    const armadas = listasIniciales(estado.productos)
+    if (!estado.listasPrecio?.length) estado.listasPrecio = armadas.listas
+    if (!estado.precios?.length) estado.precios = armadas.precios
+  }
+  for (const socio of estado.socios) {
+    if (!socio.listaPrecioId) socio.listaPrecioId = socio.id === 'soc-coop' ? 'lista-mayoreo' : 'lista-general'
+  }
+  for (const ruta of estado.rutas) {
+    if (ruta.vehiculoId && estado.vehiculos.some((v) => v.id === ruta.vehiculoId)) continue
+    const texto = (ruta.vehiculo ?? '').toLowerCase()
+    const hallado = estado.vehiculos.find((v) => texto.includes(v.nombre.toLowerCase()) || texto.includes(v.placa.toLowerCase()))
+    if (!hallado) continue
+    ruta.vehiculoId = hallado.id
+    ruta.vehiculo = `${hallado.nombre} · ${hallado.placa}`
+  }
+  for (const vehiculo of estado.vehiculos) {
+    const ocupado = estado.rutas.some((r) => r.vehiculoId === vehiculo.id && r.estado !== 'finalizada')
+    if (ocupado && vehiculo.estado !== 'baja' && vehiculo.estado !== 'taller') vehiculo.estado = 'en_ruta'
+    if (!ocupado && vehiculo.estado === 'en_ruta') vehiculo.estado = 'disponible'
+  }
+  const valor = redondear(estado.vehiculos.reduce((suma, vehiculo) => suma + vehiculo.valor, 0))
+  if (valor > 0 && saldoCuenta(estado, CTA.flota) === 0) {
+    const asiento = registrarAsiento(estado, {
+      fecha: '2026-01-02',
+      descripcion: 'Reconocimiento de la flota',
+      origen: 'activo',
+      sucursalId: estado.sucursales.find((s) => s.esMatriz)?.id ?? estado.sucursales[0]?.id ?? 'suc-z10',
+      lineas: [
+        { cuentaId: CTA.flota, detalle: 'Costo de adquisición de los paneles', debe: valor, haber: 0 },
+        { cuentaId: CTA.capital, detalle: 'Aporte de activos fijos', debe: 0, haber: valor },
+      ],
+    })
+    if ('error' in asiento) return entrada
+  }
+  return estado
 }

@@ -7,8 +7,9 @@ export type EstadoFactura = 'abierta' | 'cerrada' | 'cancelada'
 export type EstadoRuta = 'planificada' | 'en_curso' | 'finalizada'
 export type EstadoParada = 'pendiente' | 'en_camino' | 'llegada' | 'entregada' | 'incidencia'
 export type OrigenInventario = 'ruta' | 'factura' | null
+export type EstadoVehiculo = 'disponible' | 'en_ruta' | 'taller' | 'baja'
 export type FormaCobro = 'efectivo' | 'transferencia' | 'tarjeta'
-export type OrigenAsiento = 'apertura' | 'compra' | 'factura' | 'nota_credito' | 'nota_debito' | 'cancelacion' | 'cobro' | 'despacho' | 'devolucion_ruta' | 'manual'
+export type OrigenAsiento = 'apertura' | 'compra' | 'factura' | 'nota_credito' | 'nota_debito' | 'cancelacion' | 'cobro' | 'despacho' | 'devolucion_ruta' | 'activo' | 'manual'
 export type ProveedorFel = 'simulado' | 'infile' | 'digifact' | 'g4s' | 'megaprint' | 'otro'
 export type AfiliacionIVA = 'GEN' | 'PEQ' | 'PEE' | 'AGR' | 'AGE'
 
@@ -93,6 +94,7 @@ export interface Socio {
   limiteCredito: number
   diasCredito: number
   estado: 'activo' | 'inactivo'
+  listaPrecioId?: string
   notas: string
 }
 
@@ -108,6 +110,32 @@ export interface Producto {
   controlaInventario: boolean
   minimo: number
   activo: boolean
+}
+
+export interface Vehiculo {
+  id: string
+  codigo: string
+  placa: string
+  nombre: string
+  sucursalId: string
+  anio: number
+  valor: number
+  estado: EstadoVehiculo
+}
+
+export interface ListaPrecio {
+  id: string
+  codigo: string
+  nombre: string
+  activa: boolean
+  esBase: boolean
+}
+
+export interface PrecioLista {
+  id: string
+  listaId: string
+  productoId: string
+  precio: number
 }
 
 export interface SerieDocumento {
@@ -158,6 +186,7 @@ export interface OrdenVenta {
   lng: number
   ventana: string
   notas: string
+  listaPrecioId?: string
   lineas: LineaComercial[]
   origenInventario: OrigenInventario
 }
@@ -337,6 +366,7 @@ export interface Ruta {
   fecha: string
   sucursalId: string
   repartidorId: string
+  vehiculoId?: string
   vehiculo: string
   estado: EstadoRuta
   paradas: Parada[]
@@ -355,6 +385,9 @@ export interface Estado {
   usuarios: Usuario[]
   socios: Socio[]
   productos: Producto[]
+  vehiculos: Vehiculo[]
+  listasPrecio: ListaPrecio[]
+  precios: PrecioLista[]
   series: SerieDocumento[]
   cuentas: Cuenta[]
   ordenesVenta: OrdenVenta[]

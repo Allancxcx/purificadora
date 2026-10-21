@@ -2,7 +2,8 @@ import { CTA } from '../dominio/calculos'
 import { hace } from '../dominio/formato'
 import { TODAS_LAS_OPCIONES } from '../dominio/permisos'
 import type { AcuseFel, Estado, Producto, Rol, SerieDocumento, Socio, Sucursal } from '../dominio/tipos'
-import { descuadre, saldoCuenta, valorInventario } from './consultas'
+import { flotaInicial, listasIniciales } from './catalogos'
+import { descuadre, precioLista, saldoCuenta, valorInventario } from './consultas'
 import { armarDte } from './dte'
 import {
   aplicarCertificacion,
@@ -73,10 +74,10 @@ export function construirSemilla(): Estado {
 
   const roles: Rol[] = [
     { id: 'rol-admin', nombre: 'Administración', descripcion: 'Toda la operación, incluyendo la handheld.', alcance: 'empresa', esRepartidor: false, sistema: true, opciones: TODAS_LAS_OPCIONES },
-    { id: 'rol-conta', nombre: 'Contabilidad', descripcion: 'Libros, facturas, cobros y certificación.', alcance: 'empresa', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'ventas.ver', 'compras.ver', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'fel.ver', 'inventario.ver', 'contabilidad.ver', 'contabilidad.editar', 'series.ver', 'empresa.ver'] },
-    { id: 'rol-ventas', nombre: 'Ventas', descripcion: 'Socios, órdenes, punto de venta y facturas de su sucursal.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'pos.operar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'rutas.ver'] },
-    { id: 'rol-bodega', nombre: 'Bodega', descripcion: 'Compras, recepción e inventario.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'compras.ver', 'compras.editar', 'inventario.ver', 'productos.editar'] },
-    { id: 'rol-gerente', nombre: 'Gerencia de sucursal', descripcion: 'Opera su sucursal, el punto de venta y las rutas.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'pos.operar', 'compras.ver', 'compras.editar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'inventario.ver', 'rutas.ver', 'rutas.despachar', 'sucursales.ver', 'series.ver'] },
+    { id: 'rol-conta', nombre: 'Contabilidad', descripcion: 'Libros, facturas, cobros y certificación.', alcance: 'empresa', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'ventas.ver', 'compras.ver', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'fel.ver', 'inventario.ver', 'contabilidad.ver', 'contabilidad.editar', 'activos.ver', 'activos.editar', 'precios.ver', 'series.ver', 'empresa.ver'] },
+    { id: 'rol-ventas', nombre: 'Ventas', descripcion: 'Socios, órdenes, punto de venta y facturas de su sucursal.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'precios.ver', 'pos.operar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'rutas.ver'] },
+    { id: 'rol-bodega', nombre: 'Bodega', descripcion: 'Compras, recepción e inventario.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'compras.ver', 'compras.editar', 'inventario.ver', 'productos.editar', 'activos.ver'] },
+    { id: 'rol-gerente', nombre: 'Gerencia de sucursal', descripcion: 'Opera su sucursal, el punto de venta y las rutas.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'precios.ver', 'precios.editar', 'pos.operar', 'compras.ver', 'compras.editar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'inventario.ver', 'activos.ver', 'rutas.ver', 'rutas.despachar', 'sucursales.ver', 'series.ver'] },
     { id: 'rol-reparto', nombre: 'Repartidor', descripcion: 'Solo la handheld de su ruta.', alcance: 'sucursal', esRepartidor: true, sistema: true, opciones: ['reparto.operar'] },
   ]
 
@@ -110,6 +111,8 @@ export function construirSemilla(): Estado {
     socio({ id: 'soc-quim', codigo: 'SN-0018', nombre: 'Químicos Andinos, S.A.', nombreComercial: 'Químicos Andinos', nit: '2244668-1', roles: ['proveedor'], telefono: '+502 2222 4500', correo: 'pedidos@quimicosandinos.example', direccion: 'Carretera a Villa Nueva km 14', municipio: 'Villa Nueva', departamento: 'Guatemala', sucursalId: 'suc-vn', lat: 14.5488, lng: -90.5722, limiteCredito: 0, diasCredito: 30, estado: 'activo', notas: 'Insumos de purificación.' }),
     socio({ id: 'soc-malo', codigo: 'SN-0019', nombre: 'Receptor de prueba SAT', nombreComercial: '', nit: '9999999-9', roles: ['cliente'], telefono: '', correo: 'rechazo@manantial.gt', direccion: 'Documento de prueba', municipio: 'Guatemala', departamento: 'Guatemala', sucursalId: 'suc-z10', lat: 14.5994, lng: -90.5138, limiteCredito: 0, diasCredito: 0, estado: 'activo', notas: 'El certificador simulado rechaza este NIT a propósito.' }),
   ]
+  for (const persona of socios) persona.listaPrecioId = persona.id === 'soc-coop' ? 'lista-mayoreo' : 'lista-general'
+  const catalogo = listasIniciales(productos)
 
   const series: SerieDocumento[] = [
     serie('ser-ov-z10', 'suc-z10', 'ORDEN_VENTA', 'OV-Z10', '', 510),
@@ -163,6 +166,9 @@ export function construirSemilla(): Estado {
     usuarios: CUENTAS_DEMO.map((c) => ({ id: c.id, nombre: c.nombre, correo: c.correo, clave: CLAVE_DEMO, rolId: c.rolId, sucursalId: c.sucursalId, telefono: c.telefono, activo: true })),
     socios,
     productos,
+    vehiculos: flotaInicial(),
+    listasPrecio: catalogo.listas,
+    precios: catalogo.precios,
     series,
     cuentas: [
       { id: '1101', codigo: '1101', nombre: 'Caja general', tipo: 'activo' },
@@ -170,6 +176,7 @@ export function construirSemilla(): Estado {
       { id: '1201', codigo: '1201', nombre: 'Clientes', tipo: 'activo' },
       { id: '1202', codigo: '1202', nombre: 'IVA crédito fiscal', tipo: 'activo' },
       { id: '1301', codigo: '1301', nombre: 'Inventario de producto terminado', tipo: 'activo' },
+      { id: '1501', codigo: '1501', nombre: 'Activos fijos — flota', tipo: 'activo' },
       { id: '2101', codigo: '2101', nombre: 'Proveedores', tipo: 'pasivo' },
       { id: '2102', codigo: '2102', nombre: 'IVA débito fiscal', tipo: 'pasivo' },
       { id: '3101', codigo: '3101', nombre: 'Capital', tipo: 'patrimonio' },
@@ -204,7 +211,7 @@ export function construirSemilla(): Estado {
   const vender = (socioId: string, sucursalId: string, fecha: string, lineas: { productoId: string; cantidad: number }[], confirmar = true) => {
     const persona = estado.socios.find((s) => s.id === socioId)
     if (!persona?.lat || !persona.lng) throw new Error(`Sin ubicación ${socioId}`)
-    const precio = (productoId: string) => estado.productos.find((p) => p.id === productoId)?.precio ?? 0
+    const precio = (productoId: string) => precioLista(estado, persona.listaPrecioId, productoId)
     const resultado = crearOrdenVenta(estado, {
       sucursalId,
       socioId,
@@ -216,6 +223,7 @@ export function construirSemilla(): Estado {
       notas: '',
       fecha,
       confirmar,
+      listaPrecioId: persona.listaPrecioId,
       lineas: lineas.map((l) => ({ ...l, precioUnitario: precio(l.productoId), descuento: 0 })),
     })
     const creada = listo(resultado)
@@ -251,7 +259,7 @@ export function construirSemilla(): Estado {
   const hotelRuta = vender('soc-hotel', 'suc-z10', hoy, [{ productoId: 'prod-gar', cantidad: 8 }, { productoId: 'prod-bot', cantidad: 2 }])
   const clin = vender('soc-clin', 'suc-z10', hoy, [{ productoId: 'prod-gar', cantidad: 6 }, { productoId: 'prod-bol', cantidad: 4 }])
   const cafe = vender('soc-cafe', 'suc-z10', hoy, [{ productoId: 'prod-gar', cantidad: 12 }])
-  const rutaJuan = listo(crearRuta(estado, { sucursalId: 'suc-z10', repartidorId: 'usr-juan', vehiculo: 'Panel 01', ordenIds: [oak, hotelRuta, clin, cafe], fecha: hoy }))
+  const rutaJuan = listo(crearRuta(estado, { sucursalId: 'suc-z10', repartidorId: 'usr-juan', vehiculoId: 'veh-01', ordenIds: [oak, hotelRuta, clin, cafe], fecha: hoy }))
   estado = paso(iniciarRuta(rutaJuan.estado, rutaJuan.id))
   const paradaJuan = estado.rutas[0].paradas[0]
   estado = paso(marcarParada(estado, estado.rutas[0].id, paradaJuan.id, 'entregada'))
@@ -260,13 +268,13 @@ export function construirSemilla(): Estado {
   const tienda = vender('soc-tienda', 'suc-mix', hoy, [{ productoId: 'prod-gar', cantidad: 8 }, { productoId: 'prod-bol', cantidad: 6 }])
   const taller = vender('soc-taller', 'suc-mix', hoy, [{ productoId: 'prod-gar', cantidad: 5 }])
   const cond = vender('soc-cond', 'suc-mix', hoy, [{ productoId: 'prod-gar', cantidad: 4 }, { productoId: 'prod-bot', cantidad: 1 }])
-  const rutaMaria = listo(crearRuta(estado, { sucursalId: 'suc-mix', repartidorId: 'usr-maria', vehiculo: 'Panel 02', ordenIds: [asados, tienda, taller, cond], fecha: hoy }))
+  const rutaMaria = listo(crearRuta(estado, { sucursalId: 'suc-mix', repartidorId: 'usr-maria', vehiculoId: 'veh-02', ordenIds: [asados, tienda, taller, cond], fecha: hoy }))
   estado = paso(iniciarRuta(rutaMaria.estado, rutaMaria.id))
   estado = paso(marcarParada(estado, estado.rutas[0].id, estado.rutas[0].paradas[0].id, 'entregada'))
 
   const colegio = vender('soc-colegio', 'suc-vn', hoy, [{ productoId: 'prod-gar', cantidad: 10 }])
   const mercado = vender('soc-mercado', 'suc-vn', hoy, [{ productoId: 'prod-gar', cantidad: 8 }, { productoId: 'prod-bol', cantidad: 4 }])
-  const rutaCarlos = listo(crearRuta(estado, { sucursalId: 'suc-vn', repartidorId: 'usr-carlos', vehiculo: 'Panel 03', ordenIds: [colegio, mercado], fecha: hoy }))
+  const rutaCarlos = listo(crearRuta(estado, { sucursalId: 'suc-vn', repartidorId: 'usr-carlos', vehiculoId: 'veh-03', ordenIds: [colegio, mercado], fecha: hoy }))
   estado = paso(iniciarRuta(rutaCarlos.estado, rutaCarlos.id))
   estado = paso(marcarParada(estado, estado.rutas[0].id, estado.rutas[0].paradas[0].id, 'entregada'))
   estado = paso(marcarParada(estado, estado.rutas[0].id, estado.rutas[0].paradas.find((p) => p.estado === 'en_camino')!.id, 'entregada'))
@@ -295,5 +303,7 @@ export function construirSemilla(): Estado {
   if (errorLibros) throw new Error(errorLibros)
   const diferencia = Math.abs(saldoCuenta(estado, CTA.inventario) - valorInventario(estado))
   if (diferencia > 0.05) throw new Error(`Inventario contable no cuadra con el kardex (${diferencia})`)
+  const valorFlota = estado.vehiculos.reduce((suma, vehiculo) => suma + vehiculo.valor, 0)
+  if (Math.abs(saldoCuenta(estado, CTA.flota) - valorFlota) > 0.05) throw new Error('La cuenta 1501 no cuadra con el catálogo de vehículos')
   return estado
 }

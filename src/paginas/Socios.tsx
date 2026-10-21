@@ -11,7 +11,7 @@ type Borrador = Omit<Socio, 'id' | 'codigo'> & { id?: string }
 const vacio = (sucursalId: string): Borrador => ({
   nombre: '', nombreComercial: '', nit: '', roles: ['cliente'], telefono: '', correo: '', direccion: '',
   municipio: 'Guatemala', departamento: 'Guatemala', sucursalId, lat: 14.5994, lng: -90.5138,
-  limiteCredito: 0, diasCredito: 0, estado: 'activo', notas: '',
+  limiteCredito: 0, diasCredito: 0, estado: 'activo', listaPrecioId: 'lista-general', notas: '',
 })
 
 export function Socios() {
@@ -92,6 +92,11 @@ export function Socios() {
             <Campo etiqueta="Departamento">
               <Lista value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })}>
                 {DEPARTAMENTOS.map((d) => <option key={d}>{d}</option>)}
+              </Lista>
+            </Campo>
+            <Campo etiqueta="Lista de precios">
+              <Lista value={form.listaPrecioId ?? ''} onChange={(e) => setForm({ ...form, listaPrecioId: e.target.value })}>
+                {estado.listasPrecio.filter((l) => l.activa).map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
               </Lista>
             </Campo>
             <Campo etiqueta="Días de crédito"><Texto type="number" value={form.diasCredito} onChange={(e) => setForm({ ...form, diasCredito: Number(e.target.value) })} /></Campo>

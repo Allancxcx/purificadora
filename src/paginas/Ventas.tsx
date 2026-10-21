@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useErp } from '../datos/store'
 import { anularOrdenVenta, confirmarOrdenVenta, crearOrdenVenta, emitirFactura, entregarEnMostrador } from '../datos/motor'
-import { facturaVigente, folio } from '../datos/consultas'
+import { facturaVigente, folio, listaDelSocio, precioLista } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { formatoFecha, quetzales } from '../dominio/formato'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
@@ -19,15 +19,22 @@ export function Ventas() {
   const [ventana, setVentana] = useState('08:00–12:00')
   const [notas, setNotas] = useState('')
   const [confirmar, setConfirmar] = useState(true)
-  const [lineas, setLineas] = useState<LineaForm[]>([{ productoId: 'prod-gar', cantidad: 10, precioUnitario: 20, descuento: 0 }])
+  const [listaId, setListaId] = useState(listaDelSocio(estado, inicial?.id ?? ''))
+  const [lineas, setLineas] = useState<LineaForm[]>([{ productoId: 'prod-gar', cantidad: 10, precioUnitario: precioLista(estado, listaDelSocio(estado, inicial?.id ?? ''), 'prod-gar'), descuento: 0 }])
 
   const ordenes = estado.ordenesVenta.filter((o) => sucursalActiva === 'todas' || o.sucursalId === sucursalActiva)
   const productos = estado.productos.filter((p) => p.activo)
+
+  function aplicarLista(id: string, actuales = lineas) {
+    setListaId(id)
+    setLineas(actuales.map((linea) => ({ ...linea, precioUnitario: precioLista(estado, id, linea.productoId) })))
+  }
 
   function elegirSocio(id: string) {
     setSocioId(id)
     const socio = estado.socios.find((s) => s.id === id)
     if (socio) setDireccion(socio.direccion)
+    aplicarLista(listaDelSocio(estado, id))
   }
 
   function guardar(event: React.FormEvent) {
@@ -43,6 +50,7 @@ export function Ventas() {
       ventana,
       notas,
       confirmar,
+      listaPrecioId: listaId,
       lineas,
     }))
     if (resultado.ok) setAbierto(false)
@@ -83,7 +91,12 @@ export function Ventas() {
           </Campo>
           <Campo etiqueta="Dirección de entrega"><Texto value={direccion} onChange={(e) => setDireccion(e.target.value)} /></Campo>
           <Campo etiqueta="Ventana"><Texto value={ventana} onChange={(e) => setVentana(e.target.value)} /></Campo>
-          <p className="text-xs text-[#5c6770]">El precio incluye IVA. El descuento se resta en quetzales.</p>
+          <Campo etiqueta="Lista de precios">
+            <Lista value={listaId} onChange={(e) => aplicarLista(e.target.value)}>
+              {estado.listasPrecio.filter((l) => l.activa).map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
+            </Lista>
+          </Campo>
+          <p className="text-xs text-[#5c6770]">El precio sale de la lista e incluye IVA. Podés cambiarlo en la línea. El descuento se resta en quetzales.</p>
           <div className="grid grid-cols-[minmax(0,1.4fr)_4.5rem_5.5rem_5.5rem] gap-2 text-xs font-semibold text-[#5c6770]">
             <span>Producto</span>
             <span>Cant.</span>
@@ -94,7 +107,7 @@ export function Ventas() {
             <div key={indice} className="grid grid-cols-[minmax(0,1.4fr)_4.5rem_5.5rem_5.5rem] gap-2">
               <Lista aria-label="Producto" value={linea.productoId} onChange={(e) => {
                 const producto = productos.find((p) => p.id === e.target.value)
-                setLineas(lineas.map((l, i) => i === indice ? { ...l, productoId: e.target.value, precioUnitario: producto?.precio ?? l.precioUnitario } : l))
+                setLineas(lineas.map((l, i) => i === indice ? { ...l, productoId: e.target.value, precioUnitario: producto ? precioLista(estado, listaId, producto.id) : l.precioUnitario } : l))
               }}>
                 {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </Lista>
@@ -103,7 +116,7 @@ export function Ventas() {
               <Texto aria-label="Descuento" type="number" step="0.01" value={linea.descuento} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, descuento: Number(e.target.value) } : l))} />
             </div>
           ))}
-          <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, precioUnitario: productos[0].precio, descuento: 0 }])}>Agregar línea</Boton>
+          <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, precioUnitario: precioLista(estado, listaId, productos[0].id), descuento: 0 }])}>Agregar línea</Boton>
           <Campo etiqueta="Notas"><Texto value={notas} onChange={(e) => setNotas(e.target.value)} /></Campo>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmar} onChange={(e) => setConfirmar(e.target.checked)} /> Confirmar al guardar</label>
           <Boton type="submit">Guardar orden</Boton>

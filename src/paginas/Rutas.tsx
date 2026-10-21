@@ -4,7 +4,7 @@ import { crearRuta, iniciarRuta } from '../datos/motor'
 import { folio, kilometrosRuta, ordenDespachable, pendienteLinea, posicionRepartidor } from '../datos/consultas'
 import { distanciaKm } from '../dominio/geo'
 import { fechaGT } from '../dominio/formato'
-import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta, Texto } from '../componentes/ui'
+import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta } from '../componentes/ui'
 import { MapaRutas } from '../componentes/Mapa'
 
 const COLORES = ['#0e7490', '#c2410c', '#0f766e', '#1d4ed8', '#a16207']
@@ -25,7 +25,7 @@ export function Rutas() {
   const [despacho, setDespacho] = useState(false)
   const [sucursalId, setSucursalId] = useState(sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva)
   const [repartidorId, setRepartidorId] = useState('')
-  const [vehiculo, setVehiculo] = useState('Panel 04')
+  const [vehiculoId, setVehiculoId] = useState(() => estado.vehiculos.find((v) => v.sucursalId === (sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva) && v.estado === 'disponible')?.id ?? '')
   const [ordenes, setOrdenes] = useState<string[]>([])
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   const [salir, setSalir] = useState(true)
@@ -42,6 +42,7 @@ export function Rutas() {
   })
   const elegida = visibles.find((r) => r.id === seleccion) ?? visibles[0]
   const repartidores = estado.usuarios.filter((u) => u.activo && u.sucursalId === sucursalId && estado.roles.find((r) => r.id === u.rolId)?.esRepartidor)
+  const flota = estado.vehiculos.filter((v) => v.sucursalId === sucursalId && v.estado === 'disponible')
   const disponibles = estado.ordenesVenta.filter((o) => o.sucursalId === sucursalId && ordenDespachable(estado, o))
 
   function armar(event: React.FormEvent) {
@@ -50,7 +51,7 @@ export function Rutas() {
       const creada = crearRuta(actual, {
         sucursalId,
         repartidorId,
-        vehiculo,
+        vehiculoId,
         ordenIds: ordenes,
         cargas: ordenes.map((ordenId) => {
           const orden = actual.ordenesVenta.find((o) => o.id === ordenId)
@@ -107,7 +108,14 @@ export function Rutas() {
       <Modal titulo="Armar ruta" abierto={despacho} onCerrar={() => setDespacho(false)} ancho="max-w-lg">
         <form className="space-y-3" onSubmit={armar}>
           <Campo etiqueta="Sucursal">
-            <Lista value={sucursalId} onChange={(e) => { setSucursalId(e.target.value); setOrdenes([]); setCantidades({}); setRepartidorId('') }}>
+            <Lista value={sucursalId} onChange={(e) => {
+              const id = e.target.value
+              setSucursalId(id)
+              setOrdenes([])
+              setCantidades({})
+              setRepartidorId('')
+              setVehiculoId(estado.vehiculos.find((v) => v.sucursalId === id && v.estado === 'disponible')?.id ?? '')
+            }}>
               {estado.sucursales.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
             </Lista>
           </Campo>
@@ -117,7 +125,13 @@ export function Rutas() {
               {repartidores.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
             </Lista>
           </Campo>
-          <Campo etiqueta="Vehículo"><Texto value={vehiculo} onChange={(e) => setVehiculo(e.target.value)} /></Campo>
+          <Campo etiqueta="Vehículo">
+            <Lista value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} required>
+              <option value="">Elegí</option>
+              {flota.map((v) => <option key={v.id} value={v.id}>{v.nombre} · {v.placa}</option>)}
+            </Lista>
+          </Campo>
+          {flota.length === 0 && <p className="text-sm text-slate-500">No hay vehículos disponibles en esta sucursal.</p>}
           <div className="max-h-72 space-y-2 overflow-auto">
             <p className="text-xs text-slate-500">Marcá la orden y escribí cuánto sube al camión. Lo que dejes en cero no sale y queda para otra ruta.</p>
             {disponibles.map((orden) => {
