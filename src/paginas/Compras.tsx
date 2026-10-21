@@ -15,7 +15,8 @@ export function Compras() {
   const [socioId, setSocioId] = useState(proveedores[0]?.id ?? '')
   const [notas, setNotas] = useState('')
   const [lineas, setLineas] = useState([{ productoId: productos[0]?.id ?? '', cantidad: 40, costoUnitario: productos[0]?.costo ?? 0 }])
-  const ordenes = estado.ordenesCompra.filter((o) => sucursalActiva === 'todas' || o.sucursalId === sucursalActiva)
+  const general = sucursalActiva === 'todas'
+  const ordenes = estado.ordenesCompra.filter((o) => general || o.sucursalId === sucursalActiva)
 
   function guardar(event: React.FormEvent) {
     event.preventDefault()
@@ -26,7 +27,7 @@ export function Compras() {
   return (
     <Pagina titulo="Órdenes de compra" detalle="El costo va sin IVA. Al recibir entra el inventario, el IVA crédito y la cuenta por pagar. La factura del proveedor no se ajusta con una nota de débito: ese documento solo se emite a un cliente." accion={puede('compras.editar') && <Boton onClick={() => setAbierto(true)}>Nueva compra</Boton>}>
       <Tabla
-        columnas={['Documento', 'Fecha', 'Proveedor', 'Estado', 'Total', '']}
+        columnas={['Documento', 'Fecha', ...(general ? ['Sucursal'] : []), 'Proveedor', 'Estado', 'Total', '']}
         vacio="No hay compras en esta sucursal."
         filas={ordenes.map((orden) => {
           const serie = estado.series.find((s) => s.id === orden.serieId)
@@ -35,6 +36,7 @@ export function Compras() {
             celdas: [
               folio(serie?.prefijo ?? 'OC', orden.numero),
               formatoFecha(orden.fecha),
+              ...(general ? [estado.sucursales.find((s) => s.id === orden.sucursalId)?.codigo ?? ''] : []),
               estado.socios.find((s) => s.id === orden.socioId)?.nombre,
               <Badge key="e" tono={orden.estado === 'recibida' ? 'ok' : orden.estado === 'anulada' ? 'peligro' : 'alerta'}>{orden.estado}</Badge>,
               quetzales(totalesCompra(orden.lineas).total),

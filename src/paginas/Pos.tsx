@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { useErp } from '../datos/store'
 import { registrarCobro, registrarVentaPos } from '../datos/motor'
@@ -16,6 +16,9 @@ interface LineaPos {
 export function Pos() {
   const { estado, sesion, sucursalActiva, verEmpresa, ejecutar, certificar, certificando } = useErp()
   const [sucursalId, setSucursalId] = useState(sucursalActiva === 'todas' ? estado.sucursales.find((s) => s.esMatriz)?.id ?? estado.sucursales[0].id : sucursalActiva)
+  useEffect(() => {
+    if (sucursalActiva !== 'todas') setSucursalId(sucursalActiva)
+  }, [sucursalActiva])
   const [socioId, setSocioId] = useState('soc-cf')
   const [carrito, setCarrito] = useState<LineaPos[]>([])
   const [pago, setPago] = useState(false)

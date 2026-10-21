@@ -29,7 +29,7 @@ export function Activos() {
   const sucursalDefault = sucursalActiva === 'todas' ? estado.sucursales[0].id : sucursalActiva
   const visibles = estado.vehiculos.filter((v) => sucursalActiva === 'todas' || v.sucursalId === sucursalActiva)
   const valor = visibles.reduce((suma, vehiculo) => suma + vehiculo.valor, 0)
-  const contable = sucursalActiva === 'todas' ? saldoCuenta(estado, CTA.flota) : null
+  const contable = saldoCuenta(estado, CTA.flota, sucursalActiva)
 
   function etiqueta(vehiculo: Vehiculo) {
     if (vehiculo.estado !== 'en_ruta') return ETIQUETA[vehiculo.estado]
@@ -41,7 +41,7 @@ export function Activos() {
     <Pagina titulo="Activos" detalle="Los vehículos son activos fijos. El alta entra a la cuenta 1501 y sale de bancos. Esta demostración no deprecia." accion={puede('activos.editar') && <Boton onClick={() => setForm(vacio(sucursalDefault))}>Nuevo vehículo</Boton>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Costo de adquisición</div><div className="font-display mt-1 text-3xl">{quetzales(valor)}</div></Tarjeta>
-        <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Cuenta 1501</div><div className="font-display mt-1 text-3xl">{contable === null ? 'Por sucursal no se parte' : quetzales(contable)}</div></Tarjeta>
+        <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Cuenta 1501 · {sucursalActiva === 'todas' ? 'General' : estado.sucursales.find((s) => s.id === sucursalActiva)?.codigo}</div><div className="font-display mt-1 text-3xl">{quetzales(contable)}</div></Tarjeta>
       </div>
       <Tabla
         columnas={['Código', 'Vehículo', 'Placa', 'Sucursal', 'Año', 'Valor', 'Estado']}

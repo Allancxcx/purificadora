@@ -22,7 +22,8 @@ export function Facturas() {
   const [referencia, setReferencia] = useState('')
   const [ajuste, setAjuste] = useState<null | { id: string; modo: 'credito' | 'debito' | 'anular' }>(null)
   const [motivo, setMotivo] = useState('')
-  const facturas = estado.facturas.filter((f) => sucursalActiva === 'todas' || f.sucursalId === sucursalActiva)
+  const general = sucursalActiva === 'todas'
+  const facturas = estado.facturas.filter((f) => general || f.sucursalId === sucursalActiva)
   const abierta = facturas.find((f) => f.id === vista)
 
   function descargar(id: string) {
@@ -50,6 +51,7 @@ export function Facturas() {
         id="facturas"
         columnas={[
           { id: 'documento', titulo: 'Documento' },
+          ...(general ? [{ id: 'sucursal', titulo: 'Sucursal' }] : []),
           { id: 'tipo', titulo: 'Tipo' },
           { id: 'cliente', titulo: 'Cliente' },
           { id: 'estado', titulo: 'Estado' },
@@ -71,6 +73,7 @@ export function Facturas() {
             id: factura.id,
             celdas: [
               numero,
+              ...(general ? [estado.sucursales.find((s) => s.id === factura.sucursalId)?.codigo ?? ''] : []),
               TIPO[factura.tipo],
               estado.socios.find((s) => s.id === factura.socioId)?.nombre,
               <span key="e">

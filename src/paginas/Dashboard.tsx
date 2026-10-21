@@ -1,14 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useErp } from '../datos/store'
-import { folio, saldoFactura, stock } from '../datos/consultas'
+import { deSucursal, folio, saldoFactura, stock } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { fechaGT, formatoFecha, quetzales } from '../dominio/formato'
 import { Badge, Boton, Tabla, Tarjeta } from '../componentes/ui'
-
-function deAqui<T extends { sucursalId: string }>(lista: T[], sucursalId: string) {
-  return sucursalId === 'todas' ? lista : lista.filter((item) => item.sucursalId === sucursalId)
-}
 
 const INDICADORES = [
   { id: 'ventas', titulo: 'Ventas del mes' },
@@ -32,14 +28,16 @@ export function Dashboard() {
   const [visibles, setVisibles] = useState(indicadoresGuardados)
   const [personalizar, setPersonalizar] = useState(false)
   const mes = fechaGT().slice(0, 7)
-  const facturas = deAqui(estado.facturas, sucursalActiva)
+  const general = sucursalActiva === 'todas'
+  const vista = general ? 'General' : (estado.sucursales.find((s) => s.id === sucursalActiva)?.nombre ?? 'Sucursal')
+  const facturas = deSucursal(estado.facturas, sucursalActiva)
   const cerradas = facturas.filter((f) => f.estado === 'cerrada' && f.fecha.startsWith(mes))
   const vendido = cerradas.filter((f) => f.tipo === 'FACT' && !f.ajustada).reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
   const creditos = cerradas.filter((f) => f.tipo === 'NCRE').reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
   const debitos = cerradas.filter((f) => f.tipo === 'NDEB').reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
   const porCobrar = facturas.reduce((s, f) => s + saldoFactura(f), 0)
   const abiertas = facturas.filter((f) => f.estado === 'abierta').length
-  const rutas = deAqui(estado.rutas, sucursalActiva).filter((r) => r.fecha === fechaGT())
+  const rutas = deSucursal(estado.rutas, sucursalActiva).filter((r) => r.fecha === fechaGT())
   const sucursales = sucursalActiva === 'todas' ? estado.sucursales : estado.sucursales.filter((s) => s.id === sucursalActiva)
   const bajos = estado.productos.filter((p) => p.controlaInventario && p.activo).flatMap((p) => sucursales.map((s) => ({ producto: p, sucursal: s, cantidad: stock(estado, s.id, p.id) })).filter((x) => x.cantidad < p.minimo))
   const valores: Record<string, string> = {
@@ -60,7 +58,7 @@ export function Dashboard() {
       <div className="flex flex-wrap items-end justify-between gap-3 border-b border-[#d5dde2] pb-3">
         <div>
           <h1 className="text-xl font-semibold text-[#102027]">Tablero</h1>
-          <p className="mt-1 text-sm text-[#4d5960]">Elegí qué indicadores ves. La grilla de documentos guarda tus columnas en este navegador.</p>
+          <p className="mt-1 text-sm text-[#4d5960]">{general ? 'Vista general. Cada sucursal va en su fila y el total cierra la tabla.' : `Vista ${vista}. Indicadores, documentos y rutas son de esta sucursal.`} Elegí qué indicadores ves.</p>
         </div>
         <Boton variante="secundario" onClick={() => setPersonalizar((v) => !v)}>{personalizar ? 'Listo' : 'Personalizar'}</Boton>
       </div>
@@ -82,10 +80,38 @@ export function Dashboard() {
           </Tarjeta>
         ))}
       </div>
+      {general && (
+        <Tabla
+          id="tablero-sucursales"
+          columnas={['Sucursal', 'Ventas del mes', 'Por cobrar', 'Rutas de hoy', 'Facturas abiertas']}
+          vacio="No hay sucursales."
+          filas={[
+            ...estado.sucursales.map((sucursal) => {
+              const docs = deSucursal(estado.facturas, sucursal.id)
+              const delMes = docs.filter((f) => f.estado === 'cerrada' && f.fecha.startsWith(mes))
+              const venta = delMes.filter((f) => f.tipo === 'FACT' && !f.ajustada).reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
+              const notaCredito = delMes.filter((f) => f.tipo === 'NCRE').reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
+              const notaDebito = delMes.filter((f) => f.tipo === 'NDEB').reduce((s, f) => s + totalesVenta(f.lineas).total, 0)
+              return {
+                id: sucursal.id,
+                celdas: [
+                  sucursal.nombre,
+                  quetzales(venta - notaCredito + notaDebito),
+                  quetzales(docs.reduce((s, f) => s + saldoFactura(f), 0)),
+                  String(deSucursal(estado.rutas, sucursal.id).filter((r) => r.fecha === fechaGT()).length),
+                  String(docs.filter((f) => f.estado === 'abierta').length),
+                ],
+              }
+            }),
+            { id: 'general', celdas: ['General', valores.ventas, valores.cobrar, valores.rutas, valores.abiertas] },
+          ]}
+        />
+      )}
       <Tabla
         id="tablero-documentos"
         columnas={[
           { id: 'documento', titulo: 'Documento' },
+          ...(general ? [{ id: 'sucursal', titulo: 'Sucursal' }] : []),
           { id: 'tipo', titulo: 'Tipo' },
           { id: 'fecha', titulo: 'Fecha' },
           { id: 'cliente', titulo: 'Cliente' },
@@ -99,6 +125,7 @@ export function Dashboard() {
             id: factura.id,
             celdas: [
               factura.numero ? folio(serie?.prefijo ?? 'FAC', factura.numero) : 'Sin número',
+              ...(general ? [estado.sucursales.find((s) => s.id === factura.sucursalId)?.codigo ?? ''] : []),
               factura.tipo === 'NCRE' ? 'Nota de crédito' : factura.tipo === 'NDEB' ? 'Nota de débito' : 'Factura',
               formatoFecha(factura.fecha),
               estado.socios.find((s) => s.id === factura.socioId)?.nombre,

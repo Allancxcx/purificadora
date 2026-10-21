@@ -15,6 +15,10 @@ export function listaDelSocio(estado: Estado, socioId: string): string {
   return estado.listasPrecio.find((l) => l.esBase && l.activa)?.id ?? estado.listasPrecio.find((l) => l.activa)?.id ?? ''
 }
 
+export function deSucursal<T extends { sucursalId: string }>(lista: T[], sucursalId: string): T[] {
+  return sucursalId === 'todas' ? lista : lista.filter((item) => item.sucursalId === sucursalId)
+}
+
 export function folio(prefijo: string, numero: number): string {
   return `${prefijo}-${String(numero).padStart(6, '0')}`
 }
@@ -42,10 +46,11 @@ export function valorInventario(estado: Estado, sucursalId?: string): number {
   return total
 }
 
-export function saldoCuenta(estado: Estado, cuentaId: string): number {
+export function saldoCuenta(estado: Estado, cuentaId: string, sucursalId?: string): number {
   let debe = 0
   let haber = 0
   for (const asiento of estado.asientos) {
+    if (sucursalId && sucursalId !== 'todas' && asiento.sucursalId !== sucursalId) continue
     for (const linea of asiento.lineas) {
       if (linea.cuentaId !== cuentaId) continue
       debe += linea.debe

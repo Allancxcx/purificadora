@@ -17,14 +17,14 @@ export function Inventario() {
   const [form, setForm] = useState<(Omit<Producto, 'id'> & { id?: string }) | null>(null)
   const sucursales = estado.sucursales.filter((s) => sucursalActiva === 'todas' || s.id === sucursalActiva)
   const valor = valorInventario(estado, sucursalActiva === 'todas' ? undefined : sucursalActiva)
-  const contable = sucursalActiva === 'todas' ? saldoCuenta(estado, CTA.inventario) : null
+  const contable = saldoCuenta(estado, CTA.inventario, sucursalActiva)
   const movimientos = estado.movimientos.filter((m) => m.productoId === productoId && (sucursalActiva === 'todas' || m.sucursalId === sucursalActiva)).slice().reverse().slice(0, 12)
 
   return (
     <Pagina titulo="Inventario" detalle="El kardex es la existencia. El camión descuenta al salir y la factura de mostrador descuenta al certificarse." accion={puede('productos.editar') && <Boton onClick={() => setForm(nuevo())}>Nuevo producto</Boton>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Valor a costo estándar</div><div className="font-display mt-1 text-3xl">{quetzales(valor)}</div></Tarjeta>
-        <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Cuenta 1301</div><div className="font-display mt-1 text-3xl">{contable === null ? 'Por sucursal no se parte' : quetzales(contable)}</div></Tarjeta>
+        <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Cuenta 1301 · {sucursalActiva === 'todas' ? 'General' : estado.sucursales.find((s) => s.id === sucursalActiva)?.codigo}</div><div className="font-display mt-1 text-3xl">{quetzales(contable)}</div></Tarjeta>
       </div>
       <Tabla
         columnas={['SKU', 'Producto', ...sucursales.map((s) => s.codigo), 'Mínimo']}

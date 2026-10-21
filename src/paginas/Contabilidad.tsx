@@ -39,13 +39,27 @@ export function Contabilidad() {
   const costo = balanza.filter((b) => b.cuenta.tipo === 'costo').reduce((s, b) => s + b.debe - b.haber, 0)
   const gasto = balanza.filter((b) => b.cuenta.tipo === 'gasto').reduce((s, b) => s + b.debe - b.haber, 0)
   const resultado = redondear(ingreso - costo - gasto)
-  const mayor = asientos.flatMap((a) => a.lineas.filter((l) => l.cuentaId === cuentaId).map((l) => ({ ...l, fecha: a.fecha, numero: a.numero, descripcion: a.descripcion })))
+  const codigoSucursal = (id: string) => estado.sucursales.find((s) => s.id === id)?.codigo ?? ''
+  const mayor = asientos.flatMap((a) => a.lineas.filter((l) => l.cuentaId === cuentaId).map((l) => ({ ...l, fecha: a.fecha, numero: a.numero, descripcion: a.descripcion, sucursal: codigoSucursal(a.sucursalId) })))
+  function resumir(lista: typeof asientos) {
+    let ingresoSucursal = 0
+    let costoSucursal = 0
+    let gastoSucursal = 0
+    for (const asiento of lista) for (const linea of asiento.lineas) {
+      const tipo = estado.cuentas.find((c) => c.id === linea.cuentaId)?.tipo
+      if (tipo === 'ingreso') ingresoSucursal += linea.haber - linea.debe
+      else if (tipo === 'costo') costoSucursal += linea.debe - linea.haber
+      else if (tipo === 'gasto') gastoSucursal += linea.debe - linea.haber
+    }
+    return { ingreso: redondear(ingresoSucursal), costo: redondear(costoSucursal), gasto: redondear(gastoSucursal), resultado: redondear(ingresoSucursal - costoSucursal - gastoSucursal) }
+  }
   const filasDiario = asientos.flatMap((asiento) => asiento.lineas.map((linea, indice) => {
     const cuenta = estado.cuentas.find((c) => c.id === linea.cuentaId)
     return {
       id: `${asiento.id}-${indice}`,
       celdas: [
         indice === 0 ? formatoFecha(asiento.fecha) : '',
+        indice === 0 ? codigoSucursal(asiento.sucursalId) : '',
         indice === 0 ? String(asiento.numero) : '',
         indice === 0 ? asiento.descripcion : '',
         `${cuenta?.codigo ?? ''} ${cuenta?.nombre ?? linea.cuentaId}`,
@@ -71,7 +85,7 @@ export function Contabilidad() {
   const totalPatrimonio = redondear(patrimonio.reduce((s, f) => s + f.saldo, 0) + resultado)
 
   return (
-    <Pagina titulo="Contabilidad" detalle="El libro diario es la fuente. La balanza, el estado de resultados y el balance general se arman con esos asientos, en el periodo que elijas.">
+    <Pagina titulo="Contabilidad" detalle={sucursalActiva === 'todas' ? 'Vista general: junta los asientos de todas las sucursales y, en resultados, los parte por tienda.' : `Vista de ${estado.sucursales.find((s) => s.id === sucursalActiva)?.nombre ?? 'la sucursal'}. Los libros usan solo sus asientos.`}>
       <div className="flex flex-wrap gap-2">
         {([['diario', 'Libro diario'], ['mayor', 'Mayor'], ['balanza', 'Balanza'], ['resultados', 'Resultados'], ['balance', 'Balance general'], ['nuevo', 'Asiento']] as const).map(([id, nombre]) => (
           <Boton key={id} variante={pestana === id ? 'primario' : 'secundario'} onClick={() => setPestana(id)}>{nombre}</Boton>
@@ -86,11 +100,11 @@ export function Contabilidad() {
       {pestana === 'diario' && (
         <div className="space-y-3">
           <Tabla
-            columnas={['Fecha', 'No.', 'Descripción', 'Cuenta', 'Debe', 'Haber']}
+            columnas={['Fecha', 'Sucursal', 'No.', 'Descripción', 'Cuenta', 'Debe', 'Haber']}
             vacio="No hay asientos en este periodo."
             filas={[
               ...filasDiario,
-              { id: 'tot', celdas: ['', '', `${asientos.length} asientos`, 'Sumas iguales', quetzales(sumaDebe), quetzales(sumaHaber)] },
+              { id: 'tot', celdas: ['', '', '', `${asientos.length} asientos`, 'Sumas iguales', quetzales(sumaDebe), quetzales(sumaHaber)] },
             ]}
           />
         </div>
@@ -102,7 +116,7 @@ export function Contabilidad() {
               {estado.cuentas.map((c) => <option key={c.id} value={c.id}>{c.codigo} {c.nombre}</option>)}
             </Lista>
           </Campo>
-          <Tabla columnas={['Asiento', 'Fecha', 'Descripción', 'Debe', 'Haber']} vacio="Esta cuenta no tiene movimientos en el periodo." filas={mayor.map((l, i) => ({ id: String(i), celdas: [l.numero, formatoFecha(l.fecha), l.descripcion, l.debe ? quetzales(l.debe) : '', l.haber ? quetzales(l.haber) : ''] }))} />
+          <Tabla columnas={['Asiento', 'Fecha', 'Sucursal', 'Descripción', 'Debe', 'Haber']} vacio="Esta cuenta no tiene movimientos en el periodo." filas={mayor.map((l, i) => ({ id: String(i), celdas: [l.numero, formatoFecha(l.fecha), l.sucursal, l.descripcion, l.debe ? quetzales(l.debe) : '', l.haber ? quetzales(l.haber) : ''] }))} />
         </Tarjeta>
       )}
       {pestana === 'balanza' && (
@@ -112,6 +126,21 @@ export function Contabilidad() {
         ]} />
       )}
       {pestana === 'resultados' && (
+        <div className="space-y-3">
+        {sucursalActiva === 'todas' && (
+          <Tabla
+            id="resultado-sucursal"
+            columnas={['Sucursal', 'Ingresos', 'Costos', 'Gastos', 'Resultado']}
+            vacio="No hay sucursales."
+            filas={[
+              ...estado.sucursales.map((sucursal) => {
+                const corte = resumir(asientos.filter((a) => a.sucursalId === sucursal.id))
+                return { id: sucursal.id, celdas: [sucursal.nombre, quetzales(corte.ingreso), quetzales(corte.costo), quetzales(corte.gasto), quetzales(corte.resultado)] }
+              }),
+              { id: 'general', celdas: ['General', quetzales(ingreso), quetzales(costo), quetzales(gasto), quetzales(resultado)] },
+            ]}
+          />
+        )}
         <Tarjeta className="max-w-lg space-y-2 text-sm">
           <h2 className="font-display text-2xl">Estado de resultados</h2>
           <p className="text-slate-500">{desde || 'Inicio'} — {hasta || 'hoy'}</p>
@@ -121,6 +150,7 @@ export function Contabilidad() {
           {filasGrupo('gasto').map((f) => <div key={f.id} className="flex justify-between"><span>{f.nombre}</span><span>{quetzales(f.saldo)}</span></div>)}
           <div className="flex justify-between border-t border-slate-200 pt-2 font-display text-2xl"><span>Resultado del periodo</span><span>{quetzales(resultado)}</span></div>
         </Tarjeta>
+        </div>
       )}
       {pestana === 'balance' && (
         <div className="grid gap-3 lg:grid-cols-2">

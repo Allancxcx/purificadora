@@ -22,7 +22,8 @@ export function Ventas() {
   const [listaId, setListaId] = useState(listaDelSocio(estado, inicial?.id ?? ''))
   const [lineas, setLineas] = useState<LineaForm[]>([{ productoId: 'prod-gar', cantidad: 10, precioUnitario: precioLista(estado, listaDelSocio(estado, inicial?.id ?? ''), 'prod-gar'), descuento: 0 }])
 
-  const ordenes = estado.ordenesVenta.filter((o) => sucursalActiva === 'todas' || o.sucursalId === sucursalActiva)
+  const general = sucursalActiva === 'todas'
+  const ordenes = estado.ordenesVenta.filter((o) => general || o.sucursalId === sucursalActiva)
   const productos = estado.productos.filter((p) => p.activo)
 
   function aplicarLista(id: string, actuales = lineas) {
@@ -59,7 +60,7 @@ export function Ventas() {
   return (
     <Pagina titulo="Órdenes de venta" detalle="El precio de venta incluye IVA. El correlativo de la serie se consume al crear la orden." accion={puede('ventas.editar') && <Boton onClick={() => setAbierto(true)}>Nueva orden</Boton>}>
       <Tabla
-        columnas={['Documento', 'Fecha', 'Cliente', 'Estado', 'Total', 'Acciones']}
+        columnas={['Documento', 'Fecha', ...(general ? ['Sucursal'] : []), 'Cliente', 'Estado', 'Total', 'Acciones']}
         vacio="No hay órdenes en esta sucursal."
         filas={ordenes.map((orden) => {
           const serie = estado.series.find((s) => s.id === orden.serieId)
@@ -69,6 +70,7 @@ export function Ventas() {
             celdas: [
               folio(serie?.prefijo ?? 'OV', orden.numero),
               formatoFecha(orden.fecha),
+              ...(general ? [estado.sucursales.find((s) => s.id === orden.sucursalId)?.codigo ?? ''] : []),
               estado.socios.find((s) => s.id === orden.socioId)?.nombre,
               <span key="e" className="flex gap-1"><Badge tono={orden.estado === 'entregada' ? 'ok' : orden.estado === 'en_ruta' ? 'alerta' : orden.estado === 'anulada' ? 'peligro' : 'agua'}>{orden.estado.replaceAll('_', ' ')}</Badge>{factura && <Badge tono={factura.estado === 'cerrada' ? 'ok' : factura.estado === 'cancelada' ? 'peligro' : 'alerta'}>{factura.estado}</Badge>}</span>,
               quetzales(totalesVenta(orden.lineas).total),

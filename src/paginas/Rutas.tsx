@@ -29,6 +29,14 @@ export function Rutas() {
   const [ordenes, setOrdenes] = useState<string[]>([])
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
   const [salir, setSalir] = useState(true)
+  useEffect(() => {
+    if (sucursalActiva === 'todas') return
+    setSucursalId(sucursalActiva)
+    setRepartidorId('')
+    setOrdenes([])
+    setCantidades({})
+    setVehiculoId(estado.vehiculos.find((v) => v.sucursalId === sucursalActiva && v.estado === 'disponible')?.id ?? '')
+  }, [sucursalActiva])
   const visibles = estado.rutas.filter((r) => (sucursalActiva === 'todas' || r.sucursalId === sucursalActiva) && (r.fecha === fechaGT() || r.estado !== 'finalizada'))
   const activas = visibles.filter((r) => r.estado !== 'finalizada')
   const mapa = activas.map((ruta, i) => ({
