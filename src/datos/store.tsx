@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { TODAS_LAS_OPCIONES } from '../dominio/permisos'
-import type { Empresa, Estado, Rol, Usuario } from '../dominio/tipos'
+import type { Empresa, Estado, EstadoFactura, Rol, SerieDocumento, Usuario } from '../dominio/tipos'
 import { aplicarCertificacion, type Resultado } from './motor'
 import { armarDte } from './dte'
 import { construirSemilla } from './semilla'
@@ -21,6 +21,12 @@ const COMPLEMENTO_ROL: Record<string, string[]> = {
   'rol-conta': ['empresa.ver'],
 }
 
+function estadoDocumento(valor: string): EstadoFactura {
+  if (valor === 'cerrada' || valor === 'certificada') return 'cerrada'
+  if (valor === 'cancelada' || valor === 'anulada') return 'cancelada'
+  return 'abierta'
+}
+
 function migrar(estado: Estado): Estado {
   const previa = estado.empresa
   const empresa: Empresa = {
@@ -34,9 +40,27 @@ function migrar(estado: Estado): Estado {
     departamento: previa.departamento || 'Guatemala',
     codigoPostal: previa.codigoPostal || 1010,
   }
+  const series: SerieDocumento[] = [...estado.series]
+  for (const sucursal of estado.sucursales) {
+    if (series.some((s) => s.sucursalId === sucursal.id && s.tipo === 'NOTA_DEBITO' && s.activa)) continue
+    const credito = series.find((s) => s.sucursalId === sucursal.id && s.tipo === 'NOTA_CREDITO')
+    series.push({
+      id: `ser-nd-${sucursal.id}`,
+      sucursalId: sucursal.id,
+      tipo: 'NOTA_DEBITO',
+      prefijo: `ND-${sucursal.codigo}`,
+      serieFel: credito?.serieFel || 'A',
+      resolucion: 'Control interno de demostración',
+      correlativo: 1,
+      hasta: 999999,
+      activa: true,
+    })
+  }
   return {
     ...estado,
     empresa,
+    series,
+    facturas: estado.facturas.map((factura) => ({ ...factura, estado: estadoDocumento(String(factura.estado)) })),
     roles: estado.roles.map((rol) => {
       if (rol.id === 'rol-admin') return { ...rol, opciones: TODAS_LAS_OPCIONES }
       const extra = (COMPLEMENTO_ROL[rol.id] ?? []).filter((codigo) => !rol.opciones.includes(codigo))
@@ -198,7 +222,7 @@ export function Avisos() {
   const { aviso } = useErp()
   if (!aviso) return null
   return (
-    <div className={`no-imprimir fixed bottom-4 left-4 right-4 z-[90] mx-auto max-w-md rounded-2xl px-4 py-3 text-sm shadow-lg sm:left-auto ${aviso.tipo === 'ok' ? 'bg-[#083844] text-white' : 'bg-rose-700 text-white'}`}>
+    <div className={`no-imprimir fixed bottom-4 left-4 right-4 z-[90] mx-auto max-w-md rounded px-4 py-3 text-sm shadow-lg sm:left-auto ${aviso.tipo === 'ok' ? 'bg-[#083844] text-white' : 'bg-rose-700 text-white'}`}>
       {aviso.texto}
     </div>
   )

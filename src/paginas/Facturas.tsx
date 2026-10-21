@@ -1,14 +1,17 @@
 import { useState } from 'react'
 import { useErp } from '../datos/store'
 import { armarDte } from '../datos/dte'
-import { descartarBorrador, emitirNotaCredito, registrarCobro } from '../datos/motor'
+import { anularConCertificador, cancelarDocumento, emitirNota, registrarCobro } from '../datos/motor'
 import { folio, saldoFactura } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { quetzales } from '../dominio/formato'
-import type { FormaCobro } from '../dominio/tipos'
+import type { EstadoFactura, FormaCobro } from '../dominio/tipos'
 import { dteAXml } from '../servicios/fel'
 import { FacturaVista } from '../componentes/FacturaVista'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
+
+const ETIQUETA: Record<EstadoFactura, string> = { abierta: 'Abierta', cerrada: 'Cerrada', cancelada: 'Cancelada' }
+const TIPO: Record<string, string> = { FACT: 'Factura', NCRE: 'Nota de crédito', NDEB: 'Nota de débito' }
 
 export function Facturas() {
   const { estado, sucursalActiva, puede, ejecutar, certificar, certificando } = useErp()
@@ -17,6 +20,8 @@ export function Facturas() {
   const [monto, setMonto] = useState(0)
   const [forma, setForma] = useState<FormaCobro>('transferencia')
   const [referencia, setReferencia] = useState('')
+  const [ajuste, setAjuste] = useState<null | { id: string; modo: 'credito' | 'debito' | 'anular' }>(null)
+  const [motivo, setMotivo] = useState('')
   const facturas = estado.facturas.filter((f) => sucursalActiva === 'todas' || f.sucursalId === sucursalActiva)
   const abierta = facturas.find((f) => f.id === vista)
 
@@ -34,30 +39,52 @@ export function Facturas() {
     URL.revokeObjectURL(url)
   }
 
+  function pedir(id: string, modo: 'credito' | 'debito' | 'anular') {
+    setAjuste({ id, modo })
+    setMotivo(modo === 'debito' ? 'Ajuste a cargo del cliente' : modo === 'credito' ? 'Ajuste a favor del cliente' : 'Anulación ante el certificador')
+  }
+
   return (
-    <Pagina titulo="Facturas" detalle="Certificar asigna el correlativo, arma el DTE y, si el certificador acepta, registra clientes, ventas, IVA y el costo de mostrador.">
+    <Pagina titulo="Facturas" detalle="Abierta al crearla. Cerrada cuando el certificador acepta. Cancelada si se anula antes de certificar, o con el servicio de anulación si ya estaba cerrada. La nota de crédito y la de débito son documentos aparte.">
       <Tabla
-        columnas={['Documento', 'Tipo', 'Cliente', 'Estado', 'Total', 'Saldo', '']}
+        id="facturas"
+        columnas={[
+          { id: 'documento', titulo: 'Documento' },
+          { id: 'tipo', titulo: 'Tipo' },
+          { id: 'cliente', titulo: 'Cliente' },
+          { id: 'estado', titulo: 'Estado' },
+          { id: 'total', titulo: 'Total' },
+          { id: 'saldo', titulo: 'Saldo' },
+          { id: 'acciones', titulo: 'Acciones', fija: true },
+        ]}
         vacio="No hay facturas en esta sucursal. Facturá una orden de venta."
         filas={facturas.map((factura) => {
           const serie = estado.series.find((s) => s.id === factura.serieId)
-          const numero = factura.numero ? folio(serie?.prefijo ?? 'FAC', factura.numero) : 'Borrador'
+          const numero = factura.numero ? folio(serie?.prefijo ?? 'FAC', factura.numero) : 'Sin número'
+          const tieneNota = estado.facturas.some((f) => f.facturaOrigenId === factura.id && f.estado !== 'cancelada')
+          const puedeAjustar = puede('facturas.emitir') && factura.tipo === 'FACT' && factura.estado === 'cerrada' && !factura.ajustada && !tieneNota
+          const sinCobros = factura.cobros.length === 0
           return {
             id: factura.id,
             celdas: [
               numero,
-              factura.tipo,
+              TIPO[factura.tipo],
               estado.socios.find((s) => s.id === factura.socioId)?.nombre,
-              <span key="e"><Badge tono={factura.estado === 'certificada' ? 'ok' : factura.estado === 'anulada' ? 'peligro' : 'alerta'}>{factura.ajustada ? 'ajustada' : factura.estado}</Badge>{factura.ultimoError && <div className="mt-1 max-w-xs text-xs text-rose-700">{factura.ultimoError}</div>}</span>,
+              <span key="e">
+                <Badge tono={factura.estado === 'cerrada' ? 'ok' : factura.estado === 'cancelada' ? 'peligro' : 'alerta'}>{factura.ajustada ? 'Ajustada' : ETIQUETA[factura.estado]}</Badge>
+                {factura.ultimoError && <div className="mt-1 max-w-xs text-xs text-rose-700">{factura.ultimoError}</div>}
+              </span>,
               quetzales(totalesVenta(factura.lineas).total),
               quetzales(saldoFactura(factura)),
               <span key="a" className="flex flex-wrap gap-1">
                 <Boton variante="secundario" onClick={() => setVista(factura.id)}>Ver</Boton>
                 <Boton variante="secundario" onClick={() => descargar(factura.id)}>XML</Boton>
-                {puede('facturas.emitir') && factura.estado === 'borrador' && <Boton disabled={certificando === factura.id} onClick={() => certificar(factura.id)}>{certificando === factura.id ? 'Certificando…' : 'Certificar'}</Boton>}
+                {puede('facturas.emitir') && factura.estado === 'abierta' && <Boton disabled={certificando === factura.id} onClick={() => certificar(factura.id)}>{certificando === factura.id ? 'Certificando…' : 'Certificar'}</Boton>}
                 {puede('facturas.cobrar') && saldoFactura(factura) > 0 && <Boton variante="secundario" onClick={() => { setCobro(factura.id); setMonto(saldoFactura(factura)); setReferencia('') }}>Cobrar</Boton>}
-                {puede('facturas.emitir') && factura.tipo === 'FACT' && factura.estado === 'certificada' && !factura.ajustada && factura.cobros.length === 0 && <Boton variante="peligro" onClick={() => ejecutar((e) => emitirNotaCredito(e, factura.id, 'Anulación de la operación'))}>Nota de crédito</Boton>}
-                {puede('facturas.emitir') && factura.estado === 'borrador' && <Boton variante="fantasma" onClick={() => ejecutar((e) => descartarBorrador(e, factura.id))}>Descartar</Boton>}
+                {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'anular')}>Anular</Boton>}
+                {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'credito')}>Nota de crédito</Boton>}
+                {puedeAjustar && <Boton variante="secundario" onClick={() => pedir(factura.id, 'debito')}>Nota de débito</Boton>}
+                {puede('facturas.emitir') && factura.estado === 'abierta' && <Boton variante="peligro" onClick={() => ejecutar((e) => cancelarDocumento(e, factura.id))}>Cancelar</Boton>}
               </span>,
             ],
           }
@@ -81,6 +108,30 @@ export function Facturas() {
           </Campo>
           <Campo etiqueta="Referencia"><Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} /></Campo>
           <Boton type="submit">Registrar recibo</Boton>
+        </form>
+      </Modal>
+      <Modal
+        titulo={ajuste?.modo === 'debito' ? 'Nota de débito' : ajuste?.modo === 'credito' ? 'Nota de crédito' : 'Anular con el certificador'}
+        abierto={Boolean(ajuste)}
+        onCerrar={() => setAjuste(null)}
+        ancho="max-w-md"
+      >
+        <form className="space-y-3" onSubmit={(e) => {
+          e.preventDefault()
+          if (!ajuste) return
+          const resultado = ejecutar((actual) => {
+            if (ajuste.modo === 'anular') return anularConCertificador(actual, ajuste.id, motivo)
+            return emitirNota(actual, ajuste.id, ajuste.modo === 'credito' ? 'NCRE' : 'NDEB', motivo)
+          })
+          if (resultado.ok) setAjuste(null)
+        }}>
+          <p className="text-sm text-slate-600">
+            {ajuste?.modo === 'anular'
+              ? 'La factura ya está cerrada. Este paso simula el servicio de anulación del certificador y revierte el asiento. La nota de crédito es el otro camino: queda abierta hasta que la certifiques.'
+              : 'La nota queda abierta. El correlativo y el asiento se registran cuando la certifiques.'}
+          </p>
+          <Campo etiqueta="Motivo"><Texto value={motivo} onChange={(e) => setMotivo(e.target.value)} /></Campo>
+          <Boton type="submit">{ajuste?.modo === 'anular' ? 'Anular documento' : 'Crear nota'}</Boton>
         </form>
       </Modal>
     </Pagina>

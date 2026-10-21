@@ -5,14 +5,14 @@ import { ETIQUETA_SERIE } from '../dominio/permisos'
 import type { SerieDocumento, TipoSerie } from '../dominio/tipos'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
 
-const TIPOS: TipoSerie[] = ['ORDEN_VENTA', 'ORDEN_COMPRA', 'FACTURA', 'NOTA_CREDITO', 'RECIBO']
+const TIPOS: TipoSerie[] = ['ORDEN_VENTA', 'ORDEN_COMPRA', 'FACTURA', 'NOTA_CREDITO', 'NOTA_DEBITO', 'RECIBO']
 
 export function Series() {
   const { estado, sucursalActiva, puede, ejecutar } = useErp()
   const [form, setForm] = useState<(Omit<SerieDocumento, 'id'> & { id?: string }) | null>(null)
   const series = estado.series.filter((s) => sucursalActiva === 'todas' || s.sucursalId === sucursalActiva)
   return (
-    <Pagina titulo="Series de documentos" detalle="Una serie activa por tipo y sucursal. Factura y nota de crédito consumen el número solo cuando el certificador acepta. El correlativo no retrocede." accion={puede('series.editar') && <Boton onClick={() => setForm({ sucursalId: sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva, tipo: 'FACTURA', prefijo: '', serieFel: 'A', resolucion: 'Control interno', correlativo: 1, hasta: 999999, activa: false })}>Nueva serie</Boton>}>
+    <Pagina titulo="Series de documentos" detalle="Una serie activa por tipo y sucursal. Factura, nota de crédito y nota de débito consumen el número solo cuando el certificador acepta." accion={puede('series.editar') && <Boton onClick={() => setForm({ sucursalId: sucursalActiva === 'todas' ? 'suc-z10' : sucursalActiva, tipo: 'FACTURA', prefijo: '', serieFel: 'A', resolucion: 'Control interno', correlativo: 1, hasta: 999999, activa: false })}>Nueva serie</Boton>}>
       <Tabla
         columnas={['Sucursal', 'Tipo', 'Prefijo', 'Serie FEL', 'Siguiente', 'Hasta', 'Estado']}
         vacio="No hay series."

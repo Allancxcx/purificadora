@@ -8,10 +8,10 @@ export function FacturaVista({ estado, factura, onCerrar }: { estado: Estado; fa
   const sucursal = estado.sucursales.find((s) => s.id === factura.sucursalId)
   const serie = estado.series.find((s) => s.id === factura.serieId)
   const totales = totalesVenta(factura.lineas)
-  const titulo = factura.tipo === 'NCRE' ? 'Nota de crédito' : 'Factura'
+  const titulo = factura.tipo === 'NCRE' ? 'Nota de crédito' : factura.tipo === 'NDEB' ? 'Nota de débito' : 'Factura'
   return (
     <div className="fixed inset-0 z-[70] overflow-auto bg-[#083844]/50 p-4">
-      <div className="factura-impresion mx-auto max-w-3xl rounded-3xl bg-white p-6 shadow-2xl">
+      <div className="factura-impresion mx-auto max-w-3xl rounded-md bg-white p-6 shadow-2xl">
         <div className="no-imprimir mb-4 flex justify-end gap-2">
           <Boton variante="secundario" onClick={() => window.print()}>Imprimir</Boton>
           <Boton variante="fantasma" onClick={onCerrar}>Cerrar</Boton>
@@ -28,7 +28,7 @@ export function FacturaVista({ estado, factura, onCerrar }: { estado: Estado; fa
           </div>
           <div className="text-right">
             <div className="text-xs uppercase tracking-[0.16em] text-slate-500">{titulo}</div>
-            <div className="font-display text-2xl">{factura.acuse?.serie || serie?.serieFel || '—'} {factura.acuse?.numero || (factura.numero ? String(factura.numero) : 'Borrador')}</div>
+            <div className="font-display text-2xl">{factura.acuse?.serie || serie?.serieFel || '—'} {factura.acuse?.numero || (factura.numero ? String(factura.numero) : factura.estado)}</div>
             <div className="text-sm">{formatoFecha(factura.fecha)}</div>
           </div>
         </div>

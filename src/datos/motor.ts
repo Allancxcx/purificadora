@@ -188,7 +188,7 @@ export function guardarSerie(entrada: Estado, input: Omit<SerieDocumento, 'id'> 
   const estado = clonar(entrada)
   if (!input.prefijo.trim()) return { ok: false, error: 'La serie necesita un prefijo.' }
   if (input.correlativo < 1 || input.hasta < input.correlativo) return { ok: false, error: 'El rango del correlativo no es válido.' }
-  if ((input.tipo === 'FACTURA' || input.tipo === 'NOTA_CREDITO') && !input.serieFel.trim()) {
+  if ((input.tipo === 'FACTURA' || input.tipo === 'NOTA_CREDITO' || input.tipo === 'NOTA_DEBITO') && !input.serieFel.trim()) {
     return { ok: false, error: 'Las series fiscales necesitan el código de serie FEL, por ejemplo A.' }
   }
   if (input.activa) {
@@ -495,7 +495,7 @@ export function emitirFactura(entrada: Estado, ordenId: string, fecha?: string):
     serieId: serie.id,
     numero: null,
     fecha: fecha ?? fechaGT(),
-    estado: 'borrador',
+    estado: 'abierta',
     lineas: structuredClone(orden.lineas),
     motivo: '',
     acuse: null,
@@ -505,25 +505,29 @@ export function emitirFactura(entrada: Estado, ordenId: string, fecha?: string):
     ajustada: false,
   }
   estado.facturas.unshift(factura)
-  return { ok: true, estado, id: factura.id, aviso: 'Borrador listo para certificar. Todavía no consume correlativo.' }
+  return { ok: true, estado, id: factura.id, aviso: 'Factura abierta. Todavía no consume correlativo.' }
 }
 
-export function emitirNotaCredito(entrada: Estado, facturaId: string, motivo: string): Resultado {
+function notaVigente(estado: Estado, facturaId: string) {
+  return estado.facturas.some((f) => f.facturaOrigenId === facturaId && f.estado !== 'cancelada')
+}
+
+export function emitirNota(entrada: Estado, facturaId: string, tipo: 'NCRE' | 'NDEB', motivo: string): Resultado {
   const estado = clonar(entrada)
   const origen = estado.facturas.find((f) => f.id === facturaId)
-  if (!origen || origen.tipo !== 'FACT' || origen.estado !== 'certificada') {
-    return { ok: false, error: 'La nota de crédito sale de una factura certificada.' }
+  if (!origen || origen.tipo !== 'FACT' || origen.estado !== 'cerrada') {
+    return { ok: false, error: 'La nota sale de una factura cerrada.' }
   }
   if (origen.ajustada) return { ok: false, error: 'Esa factura ya fue ajustada.' }
-    if (origen.cobros.length > 0) return { ok: false, error: 'La factura ya tiene cobros. La nota de crédito total solo procede con el saldo intacto.' }
-  if (estado.facturas.some((f) => f.facturaOrigenId === origen.id && f.estado !== 'anulada')) {
-    return { ok: false, error: 'Ya existe una nota de crédito para esa factura.' }
+  if (tipo === 'NCRE' && origen.cobros.length > 0) {
+    return { ok: false, error: 'La factura ya tiene cobros. La nota de crédito total solo procede con el saldo intacto.' }
   }
-  const serie = exigirSerie(estado, origen.sucursalId, 'NOTA_CREDITO')
+  if (notaVigente(estado, origen.id)) return { ok: false, error: 'Ya hay una nota abierta o cerrada para esa factura.' }
+  const serie = exigirSerie(estado, origen.sucursalId, tipo === 'NCRE' ? 'NOTA_CREDITO' : 'NOTA_DEBITO')
   if ('error' in serie) return { ok: false, error: serie.error }
   const nota: Estado['facturas'][number] = {
-    id: nid('nc'),
-    tipo: 'NCRE',
+    id: nid(tipo === 'NCRE' ? 'nc' : 'nd'),
+    tipo,
     sucursalId: origen.sucursalId,
     socioId: origen.socioId,
     ordenVentaId: origen.ordenVentaId,
@@ -531,9 +535,9 @@ export function emitirNotaCredito(entrada: Estado, facturaId: string, motivo: st
     serieId: serie.id,
     numero: null,
     fecha: fechaGT(),
-    estado: 'borrador',
+    estado: 'abierta',
     lineas: structuredClone(origen.lineas),
-    motivo: motivo.trim() || 'Anulación de la operación',
+    motivo: motivo.trim() || (tipo === 'NCRE' ? 'Ajuste a favor del cliente' : 'Ajuste a cargo del cliente'),
     acuse: null,
     dte: null,
     cobros: [],
@@ -541,15 +545,69 @@ export function emitirNotaCredito(entrada: Estado, facturaId: string, motivo: st
     ajustada: false,
   }
   estado.facturas.unshift(nota)
-  return { ok: true, estado, id: nota.id, aviso: 'Nota de crédito en borrador. Certificala para que llegue a la SAT.' }
+  const nombre = tipo === 'NCRE' ? 'Nota de crédito' : 'Nota de débito'
+  return { ok: true, estado, id: nota.id, aviso: `${nombre} abierta. Certificala para que llegue a la SAT.` }
+}
+
+export function emitirNotaCredito(entrada: Estado, facturaId: string, motivo: string): Resultado {
+  return emitirNota(entrada, facturaId, 'NCRE', motivo)
+}
+
+export function emitirNotaDebito(entrada: Estado, facturaId: string, motivo: string): Resultado {
+  return emitirNota(entrada, facturaId, 'NDEB', motivo)
+}
+
+export function cancelarDocumento(entrada: Estado, facturaId: string): Resultado {
+  const estado = clonar(entrada)
+  const factura = estado.facturas.find((f) => f.id === facturaId)
+  if (!factura || factura.estado !== 'abierta') return { ok: false, error: 'Solo se cancela un documento que todavía está abierto.' }
+  factura.estado = 'cancelada'
+  return { ok: true, estado, aviso: 'Documento cancelado. No se certificó, así que no hay asiento que revertir.' }
 }
 
 export function descartarBorrador(entrada: Estado, facturaId: string): Resultado {
+  return cancelarDocumento(entrada, facturaId)
+}
+
+export function anularConCertificador(entrada: Estado, facturaId: string, motivo: string): Resultado {
   const estado = clonar(entrada)
   const factura = estado.facturas.find((f) => f.id === facturaId)
-  if (!factura || factura.estado !== 'borrador') return { ok: false, error: 'Solo se descarta un borrador.' }
-  factura.estado = 'anulada'
-  return { ok: true, estado, aviso: 'Borrador descartado' }
+  if (!factura || factura.tipo !== 'FACT' || factura.estado !== 'cerrada') {
+    return { ok: false, error: 'El servicio de anulación aplica a una factura cerrada.' }
+  }
+  if (factura.ajustada) return { ok: false, error: 'Esa factura ya fue ajustada.' }
+  if (factura.cobros.length > 0) return { ok: false, error: 'La factura tiene cobros. No se puede anular ante el certificador hasta dejar el saldo intacto.' }
+  if (notaVigente(estado, factura.id)) return { ok: false, error: 'Ya hay una nota sobre esa factura. Cancelala o certificala antes de anular el documento.' }
+  const orden = estado.ordenesVenta.find((o) => o.id === factura.ordenVentaId)
+  const serie = estado.series.find((s) => s.id === factura.serieId)
+  const referencia = folio(serie?.prefijo ?? 'FAC', factura.numero ?? 0)
+  let costo = 0
+  if (factura.movioInventario && orden && orden.origenInventario === 'factura') {
+    entradaInventario(estado, orden, referencia, 'Devolución por anulación', fechaGT())
+    orden.origenInventario = null
+    costo = costoOrden(orden)
+  }
+  const totales = totalesVenta(factura.lineas)
+  const socio = estado.socios.find((s) => s.id === factura.socioId)
+  const lineas = lineasIngreso(totales.total, totales.iva, socio?.nombre ?? 'Cliente', -1)
+  if (costo > 0) {
+    lineas.push({ cuentaId: CTA.inventario, detalle: 'Reingreso de inventario', debe: costo, haber: 0 })
+    lineas.push({ cuentaId: CTA.costo, detalle: 'Reversión de costo', debe: 0, haber: costo })
+  }
+  const asiento = registrarAsiento(estado, {
+    fecha: fechaGT(),
+    descripcion: `Anulación ${referencia}`,
+    origen: 'cancelacion',
+    origenId: factura.id,
+    sucursalId: factura.sucursalId,
+    lineas,
+  })
+  if ('error' in asiento) return { ok: false, error: asiento.error }
+  factura.estado = 'cancelada'
+  factura.ajustada = true
+  factura.motivo = motivo.trim() || 'Anulación ante el certificador'
+  factura.asientoId = asiento.id
+  return { ok: true, estado, aviso: 'Anulada con el certificador simulado. En producción este paso llama al servicio de anulación.' }
 }
 
 function lineasIngreso(total: number, iva: number, detalle: string, signo: 1 | -1): LineaAsiento[] {
@@ -571,12 +629,12 @@ function lineasIngreso(total: number, iva: number, detalle: string, signo: 1 | -
 export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: AcuseFel, dte: DteFel): Resultado {
   const estado = clonar(entrada)
   const factura = estado.facturas.find((f) => f.id === facturaId)
-  if (!factura || factura.estado !== 'borrador') return { ok: false, error: 'La factura ya no está en borrador.' }
+  if (!factura || factura.estado !== 'abierta') return { ok: false, error: 'La factura ya no está abierta.' }
   if (!acuse.resultado) {
     factura.ultimoError = acuse.errores.map((e) => e.mensaje).join(' ') || 'El certificador rechazó el documento.'
     return { ok: false, error: factura.ultimoError, estado }
   }
-  const tipoSerie: TipoSerie = factura.tipo === 'NCRE' ? 'NOTA_CREDITO' : 'FACTURA'
+  const tipoSerie: TipoSerie = factura.tipo === 'NCRE' ? 'NOTA_CREDITO' : factura.tipo === 'NDEB' ? 'NOTA_DEBITO' : 'FACTURA'
   const serie = exigirSerie(estado, factura.sucursalId, tipoSerie)
   if ('error' in serie) return { ok: false, error: serie.error }
 
@@ -611,7 +669,7 @@ export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: 
     if (origen) origen.ajustada = true
   }
 
-  const lineas = lineasIngreso(totales.total, totales.iva, socio?.nombre ?? 'Cliente', factura.tipo === 'FACT' ? 1 : -1)
+  const lineas = lineasIngreso(totales.total, totales.iva, socio?.nombre ?? 'Cliente', factura.tipo === 'NCRE' ? -1 : 1)
   if (costo > 0 && factura.tipo === 'FACT') {
     lineas.push({ cuentaId: CTA.costo, detalle: 'Costo de ventas', debe: costo, haber: 0 })
     lineas.push({ cuentaId: CTA.inventario, detalle: 'Salida de inventario', debe: 0, haber: costo })
@@ -620,16 +678,17 @@ export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: 
     lineas.push({ cuentaId: CTA.inventario, detalle: 'Reingreso de inventario', debe: costo, haber: 0 })
     lineas.push({ cuentaId: CTA.costo, detalle: 'Reversión de costo', debe: 0, haber: costo })
   }
+  const nombreDocumento = factura.tipo === 'NCRE' ? 'Nota de crédito' : factura.tipo === 'NDEB' ? 'Nota de débito' : 'Factura'
   const asiento = registrarAsiento(estado, {
     fecha: factura.fecha,
-    descripcion: `${factura.tipo === 'FACT' ? 'Factura' : 'Nota de crédito'} ${referencia}`,
-    origen: factura.tipo === 'FACT' ? 'factura' : 'nota_credito',
+    descripcion: `${nombreDocumento} ${referencia}`,
+    origen: factura.tipo === 'NCRE' ? 'nota_credito' : factura.tipo === 'NDEB' ? 'nota_debito' : 'factura',
     origenId: factura.id,
     sucursalId: factura.sucursalId,
     lineas,
   })
   if ('error' in asiento) return { ok: false, error: asiento.error }
-  factura.estado = 'certificada'
+  factura.estado = 'cerrada'
   factura.numero = numero.numero
   factura.acuse = acuse
   factura.dte = dte
@@ -646,8 +705,8 @@ export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: 
 export function registrarCobro(entrada: Estado, facturaId: string, monto: number, forma: FormaCobro, referencia: string): Resultado {
   const estado = clonar(entrada)
   const factura = estado.facturas.find((f) => f.id === facturaId)
-  if (!factura || factura.tipo !== 'FACT' || factura.estado !== 'certificada' || factura.ajustada) {
-    return { ok: false, error: 'Solo se cobra una factura certificada y vigente.' }
+  if (!factura || (factura.tipo !== 'FACT' && factura.tipo !== 'NDEB') || factura.estado !== 'cerrada' || factura.ajustada) {
+    return { ok: false, error: 'Solo se cobra una factura o nota de débito cerrada y vigente.' }
   }
   const saldo = redondear(totalesVenta(factura.lineas).total - factura.cobros.reduce((s, c) => s + c.monto, 0))
   if (monto <= 0 || monto - saldo > 0.001) return { ok: false, error: `El cobro no puede pasar el saldo de Q${saldo.toFixed(2)}.` }
@@ -778,6 +837,15 @@ export function iniciarRuta(entrada: Estado, rutaId: string): Resultado {
   ruta.legStartedAt = ahora
   if (ruta.paradas[0]) ruta.paradas[0].estado = 'en_camino'
   return { ok: true, estado, id: ruta.id, aviso: 'Ruta en curso. El inventario ya salió de bodega.' }
+}
+
+export function reportarGps(entrada: Estado, rutaId: string, lat: number, lng: number): Resultado {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { ok: false, error: 'La ubicación del teléfono no es válida.' }
+  const estado = clonar(entrada)
+  const ruta = estado.rutas.find((r) => r.id === rutaId)
+  if (!ruta || ruta.estado === 'finalizada') return { ok: false, error: 'Esa ruta ya no recibe ubicación.' }
+  ruta.gps = { lat, lng, en: new Date().toISOString() }
+  return { ok: true, estado }
 }
 
 function cerrarSiTermina(ruta: Estado['rutas'][number]) {

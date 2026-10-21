@@ -3,11 +3,11 @@
 html, body, #root { min-height: 100%; }
 body {
   margin: 0;
-  font-family: Outfit, "Segoe UI", sans-serif;
-  background: #e7eeee;
-  color: #122226;
+  font-family: "Segoe UI", Outfit, sans-serif;
+  background: #eef1f3;
+  color: #1b1b1b;
 }
-h1, h2, .font-display { font-family: Fraunces, Georgia, serif; font-weight: 560; }
+h1, h2, .font-display { font-family: "Segoe UI", Outfit, sans-serif; font-weight: 650; letter-spacing: -0.01em; }
 button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 

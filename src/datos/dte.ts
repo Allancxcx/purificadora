@@ -8,20 +8,20 @@ export type DteArmado = { ok: true; dte: DteFel } | { ok: false; error: string }
 export function armarDte(estado: Estado, facturaId: string): DteArmado {
   const factura = estado.facturas.find((f) => f.id === facturaId)
   if (!factura) return { ok: false, error: 'No encontré la factura.' }
-  if (factura.estado !== 'borrador') return { ok: false, error: 'Solo se certifica un borrador.' }
+  if (factura.estado !== 'abierta') return { ok: false, error: 'Solo se certifica un documento abierto.' }
   const sucursal = estado.sucursales.find((s) => s.id === factura.sucursalId)
   const socio = estado.socios.find((s) => s.id === factura.socioId)
   if (!sucursal || !socio) return { ok: false, error: 'Falta la sucursal o el socio.' }
-  const tipoSerie = factura.tipo === 'NCRE' ? 'NOTA_CREDITO' : 'FACTURA'
+  const tipoSerie = factura.tipo === 'NCRE' ? 'NOTA_CREDITO' : factura.tipo === 'NDEB' ? 'NOTA_DEBITO' : 'FACTURA'
   const serie = serieActiva(estado, factura.sucursalId, tipoSerie)
   if (!serie) return { ok: false, error: 'No hay una serie activa para este documento en la sucursal.' }
   if (!serie.serieFel) return { ok: false, error: 'La serie fiscal no tiene código FEL.' }
   if (serie.correlativo > serie.hasta) return { ok: false, error: 'La serie llegó a su límite.' }
 
   let complemento: DteFel['complementoNota']
-  if (factura.tipo === 'NCRE') {
+  if (factura.tipo === 'NCRE' || factura.tipo === 'NDEB') {
     const origen = estado.facturas.find((f) => f.id === factura.facturaOrigenId)
-    if (!origen?.acuse?.uuid) return { ok: false, error: 'La nota de crédito no tiene una factura certificada de origen.' }
+    if (!origen?.acuse?.uuid || origen.estado === 'cancelada') return { ok: false, error: 'La nota no tiene una factura cerrada de origen.' }
     const serieOrigen = estado.series.find((s) => s.id === origen.serieId)
     complemento = {
       uuidOrigen: origen.acuse.uuid,

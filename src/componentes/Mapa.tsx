@@ -109,7 +109,7 @@ function MarcadorClic({ onCambio }: { onCambio: (punto: Punto) => void }) {
 export function SelectorMapa({ lat, lng, onCambio }: { lat: number; lng: number; onCambio: (punto: Punto) => void }) {
   const centro: [number, number] = [lat || 14.6349, lng || -90.5069]
   return (
-    <div className="h-56 overflow-hidden rounded-2xl">
+    <div className="h-56 overflow-hidden rounded">
       <MapContainer center={centro} zoom={13} className="h-full w-full">
         <Ajustar />
         <TileLayer attribution="&copy; OpenStreetMap" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />

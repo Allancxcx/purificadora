@@ -22,7 +22,7 @@ function Guard({ codigo, children }: { codigo: string; children: React.ReactNode
   const { puede } = useErp()
   if (!puede(codigo)) {
     return (
-      <div className="rounded-3xl bg-white p-8">
+      <div className="rounded-md bg-white p-8">
         <h1 className="font-display text-3xl">Sin acceso</h1>
         <p className="mt-2 text-slate-600">Tu rol no tiene esta opción. Un administrador puede asignarla.</p>
       </div>

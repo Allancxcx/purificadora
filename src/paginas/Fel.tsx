@@ -15,7 +15,7 @@ export function Fel() {
     nombreComercial: estado.empresa.nombreComercial,
     nit: estado.empresa.nit,
   })
-  const borrador = estado.facturas.find((f) => f.estado === 'borrador')
+  const borrador = estado.facturas.find((f) => f.estado === 'abierta')
   const muestra = borrador ? armarDte(estado, borrador.id) : null
   const xml = muestra?.ok ? dteAXml(muestra.dte) : ''
 
@@ -74,8 +74,8 @@ export function Fel() {
           <p className="text-sm">El adaptador está en <code>src/servicios/fel.ts</code>. Implementás <code>certificar(dte)</code> y devolvés el acuse. La contabilidad no cambia.</p>
           {xml && (
             <>
-              <h3 className="text-sm font-semibold">Vista del próximo borrador</h3>
-              <pre className="max-h-80 overflow-auto rounded-2xl bg-[#083844] p-3 text-[11px] leading-relaxed text-cyan-50">{xml}</pre>
+              <h3 className="text-sm font-semibold">Vista del próximo documento abierto</h3>
+              <pre className="max-h-80 overflow-auto rounded bg-[#083844] p-3 text-[11px] leading-relaxed text-cyan-50">{xml}</pre>
             </>
           )}
         </Tarjeta>

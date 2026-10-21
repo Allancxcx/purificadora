@@ -1,14 +1,14 @@
 export type RolSocio = 'cliente' | 'proveedor' | 'lead'
-export type TipoSerie = 'ORDEN_VENTA' | 'ORDEN_COMPRA' | 'FACTURA' | 'NOTA_CREDITO' | 'RECIBO'
+export type TipoSerie = 'ORDEN_VENTA' | 'ORDEN_COMPRA' | 'FACTURA' | 'NOTA_CREDITO' | 'NOTA_DEBITO' | 'RECIBO'
 export type TipoDte = 'FACT' | 'NCRE' | 'NDEB' | 'FCAM' | 'FPEQ' | 'RECI' | 'FESP'
 export type EstadoOrdenVenta = 'borrador' | 'confirmada' | 'en_ruta' | 'entregada' | 'anulada'
 export type EstadoOrdenCompra = 'borrador' | 'recibida' | 'anulada'
-export type EstadoFactura = 'borrador' | 'certificada' | 'anulada'
+export type EstadoFactura = 'abierta' | 'cerrada' | 'cancelada'
 export type EstadoRuta = 'planificada' | 'en_curso' | 'finalizada'
 export type EstadoParada = 'pendiente' | 'en_camino' | 'llegada' | 'entregada' | 'incidencia'
 export type OrigenInventario = 'ruta' | 'factura' | null
 export type FormaCobro = 'efectivo' | 'transferencia' | 'tarjeta'
-export type OrigenAsiento = 'apertura' | 'compra' | 'factura' | 'nota_credito' | 'cobro' | 'despacho' | 'devolucion_ruta' | 'manual'
+export type OrigenAsiento = 'apertura' | 'compra' | 'factura' | 'nota_credito' | 'nota_debito' | 'cancelacion' | 'cobro' | 'despacho' | 'devolucion_ruta' | 'manual'
 export type ProveedorFel = 'simulado' | 'infile' | 'digifact' | 'g4s' | 'megaprint' | 'otro'
 export type AfiliacionIVA = 'GEN' | 'PEQ' | 'PEE' | 'AGR' | 'AGE'
 
@@ -264,7 +264,7 @@ export interface Cobro {
 
 export interface Factura {
   id: string
-  tipo: 'FACT' | 'NCRE'
+  tipo: 'FACT' | 'NCRE' | 'NDEB'
   sucursalId: string
   socioId: string
   ordenVentaId?: string
@@ -341,6 +341,7 @@ export interface Ruta {
   iniciadaEn?: string
   legStartedAt?: string
   asientoCostoId?: string
+  gps?: { lat: number; lng: number; en: string }
 }
 
 export interface Estado {

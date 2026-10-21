@@ -43,13 +43,13 @@ export function saldoCuenta(estado: Estado, cuentaId: string): number {
 }
 
 export function saldoFactura(factura: Factura): number {
-  if (factura.tipo !== 'FACT' || factura.estado !== 'certificada' || factura.ajustada) return 0
+  if ((factura.tipo !== 'FACT' && factura.tipo !== 'NDEB') || factura.estado !== 'cerrada' || factura.ajustada) return 0
   const cobrado = redondear(factura.cobros.reduce((suma, cobro) => suma + cobro.monto, 0))
   return redondear(totalesVenta(factura.lineas).total - cobrado)
 }
 
 export function facturaVigente(estado: Estado, ordenId: string): Factura | undefined {
-  return estado.facturas.find((f) => f.ordenVentaId === ordenId && f.tipo === 'FACT' && f.estado !== 'anulada' && !f.ajustada)
+  return estado.facturas.find((f) => f.ordenVentaId === ordenId && f.tipo === 'FACT' && f.estado !== 'cancelada' && !f.ajustada)
 }
 
 export function ordenDespachable(estado: Estado, orden: OrdenVenta): boolean {
@@ -59,6 +59,10 @@ export function ordenDespachable(estado: Estado, orden: OrdenVenta): boolean {
 }
 
 export function posicionRepartidor(ruta: Ruta, bodega: Punto, now: number): Punto {
+  if (ruta.gps) {
+    const edad = now - Date.parse(ruta.gps.en)
+    if (edad >= 0 && edad < 90_000) return { lat: ruta.gps.lat, lng: ruta.gps.lng }
+  }
   const ultima = ruta.paradas[ruta.paradas.length - 1]
   if (ruta.estado === 'planificada') return bodega
   if (ruta.estado === 'finalizada') return ultima ? { lat: ultima.lat, lng: ultima.lng } : bodega

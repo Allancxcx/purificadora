@@ -42,6 +42,7 @@ export const ETIQUETA_SERIE: Record<string, string> = {
   ORDEN_COMPRA: 'Orden de compra',
   FACTURA: 'Factura',
   NOTA_CREDITO: 'Nota de crédito',
+  NOTA_DEBITO: 'Nota de débito',
   RECIBO: 'Recibo de caja',
 }
 

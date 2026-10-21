@@ -62,7 +62,7 @@ export function Ventas() {
               folio(serie?.prefijo ?? 'OV', orden.numero),
               formatoFecha(orden.fecha),
               estado.socios.find((s) => s.id === orden.socioId)?.nombre,
-              <span key="e" className="flex gap-1"><Badge tono={orden.estado === 'entregada' ? 'ok' : orden.estado === 'en_ruta' ? 'alerta' : orden.estado === 'anulada' ? 'peligro' : 'agua'}>{orden.estado.replaceAll('_', ' ')}</Badge>{factura && <Badge tono={factura.estado === 'certificada' ? 'ok' : 'neutro'}>{factura.estado === 'certificada' ? 'facturada' : 'borrador FEL'}</Badge>}</span>,
+              <span key="e" className="flex gap-1"><Badge tono={orden.estado === 'entregada' ? 'ok' : orden.estado === 'en_ruta' ? 'alerta' : orden.estado === 'anulada' ? 'peligro' : 'agua'}>{orden.estado.replaceAll('_', ' ')}</Badge>{factura && <Badge tono={factura.estado === 'cerrada' ? 'ok' : factura.estado === 'cancelada' ? 'peligro' : 'alerta'}>{factura.estado}</Badge>}</span>,
               quetzales(totalesVenta(orden.lineas).total),
               <span key="a" className="flex flex-wrap gap-1">
                 {puede('ventas.editar') && orden.estado === 'borrador' && <Boton variante="secundario" onClick={() => ejecutar((e) => confirmarOrdenVenta(e, orden.id))}>Confirmar</Boton>}

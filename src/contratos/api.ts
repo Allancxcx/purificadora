@@ -7,7 +7,7 @@
  * el API reserva el correlativo, publica el DTE al certificador y,
  * al volver el acuse, corre aplicarCertificacion. Si el proceso cae,
  * el borrador sigue y el reintento no duplica el asiento porque solo
- * certifica estado "borrador".
+ * certifica estado "abierta".
  */
 export const ENDPOINTS = [
   ['POST', '/api/sesion', 'entrar'],
@@ -23,7 +23,8 @@ export const ENDPOINTS = [
   ['POST', '/api/ordenes-venta', 'crearOrdenVenta'],
   ['POST', '/api/ordenes-compra', 'crearOrdenCompra'],
   ['POST', '/api/ordenes-compra/:id/recibir', 'recibirOrdenCompra'],
-  ['POST', '/api/facturas', 'emitirFactura / emitirNotaCredito'],
+  ['POST', '/api/facturas', 'emitirFactura / emitirNotaCredito / emitirNotaDebito'],
+  ['POST', '/api/facturas/:id/cancelar', 'cancelarDocumento si está abierta; anularConCertificador si está cerrada'],
   ['POST', '/api/facturas/:id/certificar', 'armarDte + certificador + aplicarCertificacion'],
   ['POST', '/api/facturas/:id/cobros', 'registrarCobro'],
   ['POST', '/api/rutas', 'crearRuta'],

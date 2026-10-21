@@ -29,7 +29,7 @@ export function Login() {
       <section className="relative hidden overflow-hidden bg-[#083844] text-white lg:flex lg:flex-col lg:justify-between lg:p-12">
         <div>
           <div className="flex items-center gap-3">
-            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-cyan-300 text-[#083844]"><Droplets /></span>
+            <span className="grid h-12 w-12 place-items-center rounded bg-cyan-300 text-[#083844]"><Droplets /></span>
             <div className="font-display text-3xl">{estado.empresa.nombreComercial}</div>
           </div>
           <h1 className="font-display mt-16 max-w-md text-5xl leading-tight">Agua purificada, sucursales y reparto en una sola operación.</h1>
@@ -43,7 +43,7 @@ export function Login() {
           <p className="mt-2 text-sm text-slate-600">Entrá con un usuario de demostración. La clave de todos es <strong>{CLAVE_DEMO}</strong>.</p>
           <div className="mt-5 grid grid-cols-2 gap-2">
             {CUENTAS_DEMO.map((cuenta) => (
-              <button key={cuenta.id} className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-left hover:border-cyan-700" onClick={() => { setCorreo(cuenta.correo); setClave(CLAVE_DEMO); setError(entrar(cuenta.correo, CLAVE_DEMO) ?? '') }}>
+              <button key={cuenta.id} className="rounded border border-slate-200 bg-white px-3 py-2 text-left hover:border-cyan-700" onClick={() => { setCorreo(cuenta.correo); setClave(CLAVE_DEMO); setError(entrar(cuenta.correo, CLAVE_DEMO) ?? '') }}>
                 <div className="text-sm font-medium">{cuenta.nombre}</div>
                 <div className="text-xs text-slate-500">{cuenta.rol}</div>
               </button>

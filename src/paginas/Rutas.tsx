@@ -54,7 +54,7 @@ export function Rutas() {
   }
 
   return (
-    <Pagina titulo="Rutas en vivo" detalle="El punto se acerca a la siguiente parada y espera ahí hasta que el repartidor confirma en la handheld." accion={puede('rutas.despachar') && <Boton onClick={() => setDespacho(true)}>Despachar</Boton>}>
+    <Pagina titulo="Rutas en vivo" detalle="Si el repartidor activa el GPS en su teléfono, el punto es esa ubicación. Si no hay señal reciente, el mapa avanza solo hacia la siguiente parada." accion={puede('rutas.despachar') && <Boton onClick={() => setDespacho(true)}>Despachar</Boton>}>
       <div className="grid h-[calc(100vh-11rem)] min-h-[560px] gap-3 lg:grid-cols-[320px_1fr]">
         <div className="space-y-2 overflow-auto">
           {visibles.map((ruta) => {
@@ -62,9 +62,9 @@ export function Rutas() {
             const hechas = ruta.paradas.filter((p) => p.estado === 'entregada').length
             const bodega = estado.sucursales.find((s) => s.id === ruta.sucursalId)!
             return (
-              <button key={ruta.id} className={`w-full rounded-3xl bg-white p-3 text-left ${elegida?.id === ruta.id ? 'ring-2 ring-cyan-700' : ''}`} onClick={() => setSeleccion(ruta.id)}>
+              <button key={ruta.id} className={`w-full rounded-md bg-white p-3 text-left ${elegida?.id === ruta.id ? 'ring-2 ring-cyan-700' : ''}`} onClick={() => setSeleccion(ruta.id)}>
                 <div className="flex items-center justify-between"><strong>{nombre}</strong><Badge tono={ruta.estado === 'en_curso' ? 'alerta' : ruta.estado === 'finalizada' ? 'ok' : 'neutro'}>{ruta.estado.replaceAll('_', ' ')}</Badge></div>
-                <div className="text-xs text-slate-500">{ruta.codigo} · {ruta.vehiculo} · {hechas}/{ruta.paradas.length} · {kilometrosRuta(ruta, bodega).toFixed(1)} km</div>
+                <div className="text-xs text-slate-500">{ruta.codigo} · {ruta.vehiculo} · {hechas}/{ruta.paradas.length} · {kilometrosRuta(ruta, bodega).toFixed(1)} km{ruta.gps && ahora - Date.parse(ruta.gps.en) < 90_000 ? ' · GPS del teléfono' : ''}</div>
               </button>
             )
           })}
@@ -87,7 +87,7 @@ export function Rutas() {
             </Tarjeta>
           )}
         </div>
-        <div className="h-full min-h-[480px] overflow-hidden rounded-3xl">
+        <div className="h-full min-h-[480px] overflow-hidden rounded-md">
           <MapaRutas rutas={mapa} bodegas={estado.sucursales.map((s) => ({ id: s.id, nombre: s.nombre, punto: s }))} posiciones={posiciones} seleccionada={elegida?.id} onSeleccionar={setSeleccion} />
         </div>
       </div>
@@ -109,7 +109,7 @@ export function Rutas() {
             {disponibles.map((orden) => {
               const serie = estado.series.find((s) => s.id === orden.serieId)
               return (
-                <label key={orden.id} className="flex gap-2 rounded-2xl bg-slate-50 px-3 py-2 text-sm">
+                <label key={orden.id} className="flex gap-2 rounded bg-slate-50 px-3 py-2 text-sm">
                   <input type="checkbox" checked={ordenes.includes(orden.id)} onChange={(e) => setOrdenes(e.target.checked ? [...ordenes, orden.id] : ordenes.filter((id) => id !== orden.id))} />
                   <span>{serie?.prefijo}-{orden.numero} · {estado.socios.find((s) => s.id === orden.socioId)?.nombre}<br /><span className="text-xs text-slate-500">{orden.direccionEntrega}</span></span>
                 </label>

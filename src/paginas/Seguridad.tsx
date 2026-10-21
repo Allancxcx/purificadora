@@ -29,7 +29,7 @@ export function Seguridad() {
       <div className="grid gap-3 lg:grid-cols-[220px_1fr]">
         <div className="space-y-2">
           {estado.roles.map((item) => (
-            <button key={item.id} className={`w-full rounded-2xl px-3 py-2 text-left text-sm ${item.id === rol?.id ? 'bg-[#083844] text-white' : 'bg-white'}`} onClick={() => elegirRol(item.id)}>
+            <button key={item.id} className={`w-full rounded px-3 py-2 text-left text-sm ${item.id === rol?.id ? 'bg-[#083844] text-white' : 'bg-white'}`} onClick={() => elegirRol(item.id)}>
               <div className="font-medium">{item.nombre}</div>
               <div className={item.id === rol?.id ? 'text-cyan-100' : 'text-slate-500'}>{item.alcance}</div>
             </button>

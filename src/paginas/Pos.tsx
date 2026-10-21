@@ -97,7 +97,7 @@ export function Pos() {
           {productos.map((producto) => {
             const existencias = producto.controlaInventario ? stock(estado, sucursalId, producto.id) : null
             return (
-              <button key={producto.id} type="button" onClick={() => agregar(producto.id)} className="rounded-3xl bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-cyan-400">
+              <button key={producto.id} type="button" onClick={() => agregar(producto.id)} className="rounded-md bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-cyan-400">
                 <div className="text-xs uppercase tracking-[0.14em] text-slate-500">{producto.sku}</div>
                 <div className="font-display mt-1 text-2xl text-[#083844]">{producto.nombre}</div>
                 <div className="mt-3 flex items-end justify-between">
@@ -108,7 +108,7 @@ export function Pos() {
             )
           })}
         </div>
-        <aside className="rounded-3xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+        <aside className="rounded-md bg-white p-4 shadow-sm ring-1 ring-slate-200">
           <Campo etiqueta="Cliente">
             <Lista value={socioId} onChange={(e) => setSocioId(e.target.value)} className="bg-white text-[#083844]">
               {clientes.map((s) => <option key={s.id} value={s.id}>{s.nombreComercial || s.nombre}</option>)}
