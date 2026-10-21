@@ -18,6 +18,7 @@ import { EmpresaPagina } from './paginas/Empresa'
 import { Pos } from './paginas/Pos'
 import { Reparto } from './paginas/Reparto'
 import { Activos } from './paginas/Activos'
+import { Bancos } from './paginas/Bancos'
 import { Precios } from './paginas/Precios'
 
 function Guard({ codigo, children }: { codigo: string; children: React.ReactNode }) {
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="facturas" element={<Guard codigo="facturas.ver"><Facturas /></Guard>} />
           <Route path="inventario" element={<Guard codigo="inventario.ver"><Inventario /></Guard>} />
           <Route path="contabilidad" element={<Guard codigo="contabilidad.ver"><Contabilidad /></Guard>} />
+          <Route path="bancos" element={<Guard codigo="bancos.ver"><Bancos /></Guard>} />
           <Route path="activos" element={<Guard codigo="activos.ver"><Activos /></Guard>} />
           <Route path="rutas" element={<Guard codigo="rutas.ver"><Rutas /></Guard>} />
           <Route path="sucursales" element={<Guard codigo="sucursales.ver"><Sucursales /></Guard>} />

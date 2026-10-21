@@ -21,8 +21,8 @@ import type {
   Usuario,
   Vehiculo,
 } from '../dominio/tipos'
-import { flotaInicial, listasIniciales } from './catalogos'
-import { facturaVigente, saldoCuenta, serieActiva, stock } from './consultas'
+import { cuentasBancariasIniciales, flotaInicial, listasIniciales } from './catalogos'
+import { facturaVigente, saldoBanco, saldoCuenta, serieActiva, stock } from './consultas'
 
 export type Resultado =
   | { ok: true; estado: Estado; id?: string; aviso?: string }
@@ -49,6 +49,22 @@ function registrarAsiento(estado: Estado, input: Omit<Asiento, 'id' | 'numero'>)
   const debe = redondear(lineas.reduce((s, l) => s + l.debe, 0))
   const haber = redondear(lineas.reduce((s, l) => s + l.haber, 0))
   if (debe !== haber) return { error: `El asiento no cuadra. Debe ${debe} y haber ${haber}.` }
+  for (const linea of lineas) {
+    if (linea.cuentaId === CTA.bancos && !linea.bancoId) return { error: 'La línea de bancos necesita una cuenta bancaria.' }
+    if (linea.bancoId && linea.cuentaId !== CTA.bancos) return { error: 'La cuenta bancaria solo se usa en la 1102.' }
+    if (linea.bancoId && !estado.cuentasBancarias?.some((cuenta) => cuenta.id === linea.bancoId && cuenta.activa)) return { error: 'La cuenta bancaria no está activa.' }
+  }
+  const salidas = new Map<string, number>()
+  for (const linea of lineas) {
+    if (!linea.bancoId) continue
+    salidas.set(linea.bancoId, redondear((salidas.get(linea.bancoId) ?? 0) + linea.haber - linea.debe))
+  }
+  for (const [bancoId, salida] of salidas) {
+    if (salida > 0.001 && saldoBanco(estado, bancoId) + 0.001 < salida) {
+      const nombre = estado.cuentasBancarias.find((cuenta) => cuenta.id === bancoId)?.nombre ?? 'la cuenta'
+      return { error: `No hay saldo en ${nombre}.` }
+    }
+  }
   const id = nid('ast')
   estado.asientos.push({ ...input, id, numero: estado.siguienteAsiento, lineas })
   estado.siguienteAsiento += 1
@@ -135,7 +151,7 @@ export interface CargaInicial {
   cantidad: number
 }
 
-export function cargarSaldosIniciales(entrada: Estado, cargas: CargaInicial[], bancos: number): Resultado {
+export function cargarSaldosIniciales(entrada: Estado, cargas: CargaInicial[], bancos: number, bancoId: string): Resultado {
   const estado = clonar(entrada)
   let valor = 0
   for (const carga of cargas) {
@@ -154,13 +170,15 @@ export function cargarSaldosIniciales(entrada: Estado, cargas: CargaInicial[], b
     })
   }
   const flota = redondear((estado.vehiculos ?? []).reduce((suma, vehiculo) => suma + vehiculo.valor, 0))
+  const banco = estado.cuentasBancarias?.find((cuenta) => cuenta.id === bancoId && cuenta.activa)
+  if (!banco) return { ok: false, error: 'La apertura necesita una cuenta bancaria activa.' }
   const asiento = registrarAsiento(estado, {
     fecha: '2026-01-02',
     descripcion: 'Apertura del ejercicio de demostración',
     origen: 'apertura',
     sucursalId: 'suc-z10',
     lineas: [
-      { cuentaId: CTA.bancos, detalle: 'Saldo en bancos', debe: bancos, haber: 0 },
+      { cuentaId: CTA.bancos, detalle: `Saldo en ${banco.nombre}`, debe: bancos, haber: 0, bancoId: banco.id },
       { cuentaId: CTA.inventario, detalle: 'Inventario inicial a costo estándar', debe: valor, haber: 0 },
       ...(flota > 0 ? [{ cuentaId: CTA.flota, detalle: 'Flota a costo de adquisición', debe: flota, haber: 0 }] : []),
       { cuentaId: CTA.capital, detalle: 'Capital', debe: 0, haber: redondear(bancos + valor + flota) },
@@ -752,7 +770,7 @@ export function aplicarCertificacion(entrada: Estado, facturaId: string, acuse: 
   }
 }
 
-export function registrarCobro(entrada: Estado, facturaId: string, monto: number, forma: FormaCobro, referencia: string): Resultado {
+export function registrarCobro(entrada: Estado, facturaId: string, monto: number, forma: FormaCobro, referencia: string, bancoId?: string): Resultado {
   const estado = clonar(entrada)
   const factura = estado.facturas.find((f) => f.id === facturaId)
   if (!factura || (factura.tipo !== 'FACT' && factura.tipo !== 'NDEB') || factura.estado !== 'cerrada' || factura.ajustada) {
@@ -767,6 +785,8 @@ export function registrarCobro(entrada: Estado, facturaId: string, monto: number
   if ('error' in serie) return { ok: false, error: serie.error }
   const numero = tomarNumero(estado, serie.id)
   if ('error' in numero) return { ok: false, error: numero.error }
+  const banco = forma === 'efectivo' ? undefined : estado.cuentasBancarias?.find((item) => item.id === bancoId && item.activa)
+  if (forma !== 'efectivo' && !banco) return { ok: false, error: 'Elegí la cuenta bancaria del cobro.' }
   const cuenta = forma === 'efectivo' ? CTA.caja : CTA.bancos
   const asiento = registrarAsiento(estado, {
     fecha: fechaGT(),
@@ -775,7 +795,7 @@ export function registrarCobro(entrada: Estado, facturaId: string, monto: number
     origenId: factura.id,
     sucursalId: factura.sucursalId,
     lineas: [
-      { cuentaId: cuenta, detalle: forma, debe: redondear(monto), haber: 0 },
+      { cuentaId: cuenta, detalle: banco ? `${forma} · ${banco.nombre}` : forma, debe: redondear(monto), haber: 0, bancoId: banco?.id },
       { cuentaId: CTA.clientes, detalle: referencia || 'Cobro de factura', debe: 0, haber: redondear(monto) },
     ],
   })
@@ -788,9 +808,75 @@ export function registrarCobro(entrada: Estado, facturaId: string, monto: number
     numero: numero.numero,
     forma,
     referencia,
+    bancoId: banco?.id,
     asientoId: asiento.id,
   })
   return { ok: true, estado, aviso: `Recibo ${folio(serie.prefijo, numero.numero)} registrado` }
+}
+
+export function pagarProveedor(entrada: Estado, ordenId: string, monto: number, bancoId: string, referencia: string, fecha?: string): Resultado {
+  const estado = clonar(entrada)
+  const orden = estado.ordenesCompra.find((item) => item.id === ordenId)
+  if (!orden || orden.estado !== 'recibida') return { ok: false, error: 'Solo se paga una compra ya recibida.' }
+  const pagado = (estado.pagosProveedor ?? []).filter((pago) => pago.ordenCompraId === orden.id).reduce((suma, pago) => suma + pago.monto, 0)
+  const saldo = redondear(totalesCompra(orden.lineas).total - pagado)
+  const importe = redondear(monto)
+  if (importe <= 0 || importe - saldo > 0.001) return { ok: false, error: `El pago no puede pasar el saldo de Q${saldo.toFixed(2)}.` }
+  if (referencia.trim().length < 3) return { ok: false, error: 'Indicá la referencia de la transferencia.' }
+  const banco = estado.cuentasBancarias?.find((item) => item.id === bancoId && item.activa)
+  if (!banco) return { ok: false, error: 'Elegí la cuenta bancaria del pago.' }
+  const serie = estado.series.find((item) => item.id === orden.serieId)
+  const asiento = registrarAsiento(estado, {
+    fecha: fecha || fechaGT(),
+    descripcion: `Pago ${folio(serie?.prefijo ?? 'OC', orden.numero)}`,
+    origen: 'pago',
+    origenId: orden.id,
+    sucursalId: orden.sucursalId,
+    lineas: [
+      { cuentaId: CTA.proveedores, detalle: referencia.trim(), debe: importe, haber: 0 },
+      { cuentaId: CTA.bancos, detalle: `${banco.nombre} · ${referencia.trim()}`, debe: 0, haber: importe, bancoId: banco.id },
+    ],
+  })
+  if ('error' in asiento) return { ok: false, error: asiento.error }
+  if (!estado.pagosProveedor) estado.pagosProveedor = []
+  estado.pagosProveedor.push({
+    id: nid('pag'),
+    fecha: fecha || fechaGT(),
+    sucursalId: orden.sucursalId,
+    socioId: orden.socioId,
+    ordenCompraId: orden.id,
+    bancoId: banco.id,
+    monto: importe,
+    referencia: referencia.trim(),
+    asientoId: asiento.id,
+  })
+  return { ok: true, estado, aviso: saldo - importe < 0.01 ? 'Compra pagada' : 'Pago registrado. Queda saldo con el proveedor.' }
+}
+
+export function guardarCuentaBancaria(entrada: Estado, input: { id?: string; banco: string; nombre: string; numero: string; sucursalId: string; activa: boolean }): Resultado {
+  const estado = clonar(entrada)
+  const banco = input.banco.trim()
+  const nombre = input.nombre.trim()
+  const numero = input.numero.trim().replace(/\s+/g, '')
+  if (banco.length < 3) return { ok: false, error: 'Indicá el banco.' }
+  if (nombre.length < 3) return { ok: false, error: 'La cuenta necesita un nombre.' }
+  if (numero.length < 5) return { ok: false, error: 'El número de cuenta es muy corto.' }
+  if (!estado.sucursales.some((sucursal) => sucursal.id === input.sucursalId)) return { ok: false, error: 'Elegí la sucursal que opera la cuenta.' }
+  if (!estado.cuentasBancarias) estado.cuentasBancarias = []
+  if (estado.cuentasBancarias.some((cuenta) => cuenta.numero === numero && cuenta.id !== input.id)) return { ok: false, error: 'Ese número de cuenta ya está registrado.' }
+  if (input.id) {
+    const actual = estado.cuentasBancarias.find((cuenta) => cuenta.id === input.id)
+    if (!actual) return { ok: false, error: 'No encontré la cuenta bancaria.' }
+    actual.banco = banco
+    actual.nombre = nombre
+    actual.numero = numero
+    actual.sucursalId = input.sucursalId
+    actual.activa = input.activa
+    return { ok: true, estado, id: actual.id, aviso: 'Cuenta bancaria actualizada' }
+  }
+  const creada = { id: nid('ban'), banco, nombre, numero, moneda: 'GTQ' as const, cuentaId: CTA.bancos, sucursalId: input.sucursalId, activa: input.activa }
+  estado.cuentasBancarias.push(creada)
+  return { ok: true, estado, id: creada.id, aviso: 'Cuenta bancaria creada' }
 }
 
 export interface NuevaRuta {
@@ -1112,7 +1198,7 @@ export function registrarVentaPos(entrada: Estado, input: VentaPos): Resultado {
   return { ok: true, estado: factura.estado, id: factura.id, aviso: 'Ticket armado. Falta la certificación para cobrar.' }
 }
 
-export function guardarVehiculo(entrada: Estado, input: { id?: string; placa: string; nombre: string; sucursalId: string; anio: number; valor: number; estado?: Vehiculo['estado'] }): Resultado {
+export function guardarVehiculo(entrada: Estado, input: { id?: string; placa: string; nombre: string; sucursalId: string; anio: number; valor: number; estado?: Vehiculo['estado']; bancoId?: string }): Resultado {
   const estado = clonar(entrada)
   const placa = input.placa.trim().toUpperCase()
   const nombre = input.nombre.trim()
@@ -1140,7 +1226,8 @@ export function guardarVehiculo(entrada: Estado, input: { id?: string; placa: st
   }
   const valor = redondear(input.valor)
   if (valor < 0) return { ok: false, error: 'El valor de adquisición no puede ser negativo.' }
-  if (valor > 0 && saldoCuenta(estado, CTA.bancos) + 0.001 < valor) return { ok: false, error: 'No hay saldo en bancos para esa adquisición.' }
+  const banco = valor > 0 ? estado.cuentasBancarias?.find((cuenta) => cuenta.id === input.bancoId && cuenta.activa) : undefined
+  if (valor > 0 && !banco) return { ok: false, error: 'Elegí la cuenta bancaria que paga el vehículo.' }
   const consecutivo = estado.vehiculos.reduce((max, v) => Math.max(max, Number(v.codigo.replace(/\D/g, '')) || 0), 0) + 1
   const creado: Vehiculo = {
     id: nid('veh'),
@@ -1160,7 +1247,7 @@ export function guardarVehiculo(entrada: Estado, input: { id?: string; placa: st
       sucursalId: input.sucursalId,
       lineas: [
         { cuentaId: CTA.flota, detalle: nombre, debe: valor, haber: 0 },
-        { cuentaId: CTA.bancos, detalle: 'Pago de la flota', debe: 0, haber: valor },
+        { cuentaId: CTA.bancos, detalle: `Pago de la flota · ${banco?.nombre ?? ''}`, debe: 0, haber: valor, bancoId: banco?.id },
       ],
     })
     if ('error' in asiento) return { ok: false, error: asiento.error }
@@ -1209,6 +1296,16 @@ export function guardarPrecios(entrada: Estado, listaId: string, items: { produc
 
 export function completarCatalogos(entrada: Estado): Estado {
   const estado = clonar(entrada)
+  if (!estado.cuentasBancarias?.length) estado.cuentasBancarias = cuentasBancariasIniciales()
+  if (!estado.pagosProveedor) estado.pagosProveedor = []
+  const principal = estado.cuentasBancarias.find((cuenta) => cuenta.id === 'ban-bi') ?? estado.cuentasBancarias[0]
+  if (principal) {
+    for (const asiento of estado.asientos) {
+      for (const linea of asiento.lineas) {
+        if (linea.cuentaId === CTA.bancos && !linea.bancoId) linea.bancoId = principal.id
+      }
+    }
+  }
   if (!estado.cuentas.some((c) => c.id === CTA.flota)) {
     const inventario = estado.cuentas.findIndex((c) => c.id === CTA.inventario)
     const cuenta = { id: CTA.flota, codigo: CTA.flota, nombre: 'Activos fijos — flota', tipo: 'activo' as const }

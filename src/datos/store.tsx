@@ -17,10 +17,10 @@ export interface Aviso {
 }
 
 const COMPLEMENTO_ROL: Record<string, string[]> = {
-  'rol-ventas': ['pos.operar', 'facturas.cobrar', 'precios.ver'],
-  'rol-gerente': ['pos.operar', 'facturas.emitir', 'facturas.cobrar', 'precios.ver', 'precios.editar', 'activos.ver'],
-  'rol-conta': ['empresa.ver', 'activos.ver', 'activos.editar', 'precios.ver'],
-  'rol-bodega': ['activos.ver'],
+  'rol-ventas': ['pos.operar', 'facturas.cobrar', 'precios.ver', 'bancos.ver'],
+  'rol-gerente': ['pos.operar', 'facturas.emitir', 'facturas.cobrar', 'precios.ver', 'precios.editar', 'activos.ver', 'bancos.ver'],
+  'rol-conta': ['empresa.ver', 'activos.ver', 'activos.editar', 'precios.ver', 'bancos.ver', 'bancos.editar'],
+  'rol-bodega': ['activos.ver', 'bancos.ver'],
 }
 
 function estadoDocumento(valor: string): EstadoFactura {

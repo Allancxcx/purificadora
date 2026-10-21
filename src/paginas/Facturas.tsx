@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useErp } from '../datos/store'
 import { armarDte } from '../datos/dte'
 import { anularConCertificador, cancelarDocumento, emitirNota, registrarCobro } from '../datos/motor'
-import { folio, saldoFactura } from '../datos/consultas'
+import { bancosActivos, folio, saldoFactura } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { quetzales } from '../dominio/formato'
 import type { EstadoFactura, FormaCobro } from '../dominio/tipos'
@@ -14,15 +14,17 @@ const ETIQUETA: Record<EstadoFactura, string> = { abierta: 'Abierta', cerrada: '
 const TIPO: Record<string, string> = { FACT: 'Factura', NCRE: 'Nota de crédito', NDEB: 'Nota de débito' }
 
 export function Facturas() {
-  const { estado, sucursalActiva, enVista, puede, ejecutar, certificar, certificando } = useErp()
+  const { estado, sucursalActiva, enVista, permitidas, puede, ejecutar, certificar, certificando } = useErp()
   const [vista, setVista] = useState<string | null>(null)
   const [cobro, setCobro] = useState<string | null>(null)
   const [monto, setMonto] = useState(0)
   const [forma, setForma] = useState<FormaCobro>('transferencia')
+  const [bancoId, setBancoId] = useState('ban-bi')
   const [referencia, setReferencia] = useState('')
   const [ajuste, setAjuste] = useState<null | { id: string; modo: 'credito' | 'debito' | 'anular' }>(null)
   const [motivo, setMotivo] = useState('')
   const general = sucursalActiva === 'todas'
+  const bancos = bancosActivos(estado, permitidas)
   const facturas = estado.facturas.filter((f) => enVista(f.sucursalId))
   const abierta = facturas.find((f) => f.id === vista)
 
@@ -86,7 +88,7 @@ export function Facturas() {
                 <Boton variante="secundario" onClick={() => setVista(factura.id)}>Ver</Boton>
                 <Boton variante="secundario" onClick={() => descargar(factura.id)}>XML</Boton>
                 {puede('facturas.emitir') && factura.estado === 'abierta' && <Boton disabled={certificando === factura.id} onClick={() => certificar(factura.id)}>{certificando === factura.id ? 'Certificando…' : 'Certificar'}</Boton>}
-                {puede('facturas.cobrar') && saldoFactura(factura) > 0 && !notaCreditoPendiente && <Boton variante="secundario" onClick={() => { setCobro(factura.id); setMonto(saldoFactura(factura)); setReferencia('') }}>Cobrar</Boton>}
+                {puede('facturas.cobrar') && saldoFactura(factura) > 0 && !notaCreditoPendiente && <Boton variante="secundario" onClick={() => { setCobro(factura.id); setMonto(saldoFactura(factura)); setReferencia(''); setBancoId(bancos[0]?.id ?? '') }}>Cobrar</Boton>}
                 {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'anular')}>Anular</Boton>}
                 {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'credito')}>Nota de crédito</Boton>}
                 {puedeAjustar && <Boton variante="secundario" onClick={() => pedir(factura.id, 'debito')}>Débito al cliente</Boton>}
@@ -101,7 +103,7 @@ export function Facturas() {
         <form className="space-y-3" onSubmit={(e) => {
           e.preventDefault()
           if (!cobro) return
-          const resultado = ejecutar((estadoActual) => registrarCobro(estadoActual, cobro, monto, forma, referencia))
+          const resultado = ejecutar((estadoActual) => registrarCobro(estadoActual, cobro, monto, forma, referencia, forma === 'efectivo' ? undefined : bancoId))
           if (resultado.ok) setCobro(null)
         }}>
           <Campo etiqueta="Monto"><Texto type="number" step="0.01" value={monto} onChange={(e) => setMonto(Number(e.target.value))} /></Campo>
@@ -112,6 +114,13 @@ export function Facturas() {
               <option value="tarjeta">Tarjeta (bancos)</option>
             </Lista>
           </Campo>
+          {forma !== 'efectivo' && (
+            <Campo etiqueta="Cuenta bancaria">
+              <Lista value={bancoId} onChange={(e) => setBancoId(e.target.value)}>
+                {bancos.map((b) => <option key={b.id} value={b.id}>{b.banco} · {b.nombre}</option>)}
+              </Lista>
+            </Campo>
+          )}
           <Campo etiqueta="Referencia"><Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} /></Campo>
           <Boton type="submit">Registrar recibo</Boton>
         </form>

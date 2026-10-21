@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { useErp } from '../datos/store'
 import { registrarCobro, registrarVentaPos } from '../datos/motor'
-import { stock } from '../datos/consultas'
+import { bancosActivos, saldoBanco, stock } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { quetzales } from '../dominio/formato'
 import type { FormaCobro } from '../dominio/tipos'
@@ -25,6 +25,8 @@ export function Pos() {
   const [forma, setForma] = useState<FormaCobro>('efectivo')
   const [recibido, setRecibido] = useState('')
   const [referencia, setReferencia] = useState('')
+  const [bancoId, setBancoId] = useState('ban-bi')
+  const bancos = bancosActivos(estado, permitidas)
   const [ocupado, setOcupado] = useState(false)
 
   const productos = estado.productos.filter((p) => p.activo)
@@ -75,7 +77,7 @@ export function Pos() {
       if (!venta.ok || !venta.id) return
       const ok = await certificar(venta.id)
       if (!ok) return
-      const cobro = ejecutar((actual) => registrarCobro(actual, venta.id!, totales.total, forma, referencia.trim()))
+      const cobro = ejecutar((actual) => registrarCobro(actual, venta.id!, totales.total, forma, referencia.trim(), forma === 'efectivo' ? undefined : bancoId))
       if (!cobro.ok) return
       setCarrito([])
       setPago(false)
@@ -154,9 +156,16 @@ export function Pos() {
             </Campo>
           )}
           {forma !== 'efectivo' && (
-            <Campo etiqueta="Referencia">
-              <Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder="Autorización o boleta" />
-            </Campo>
+            <>
+              <Campo etiqueta="Cuenta bancaria">
+                <Lista value={bancoId} onChange={(e) => setBancoId(e.target.value)}>
+                  {bancos.map((b) => <option key={b.id} value={b.id}>{b.nombre} · {quetzales(saldoBanco(estado, b.id))}</option>)}
+                </Lista>
+              </Campo>
+              <Campo etiqueta="Referencia">
+                <Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder="Autorización o boleta" />
+              </Campo>
+            </>
           )}
           {forma === 'efectivo' && <p className="text-sm">Cambio {quetzales(cambio)}</p>}
           <Boton disabled={!alcanza || ocupado || certificando !== null} onClick={cobrar}>{ocupado ? 'Certificando…' : 'Certificar y cobrar'}</Boton>

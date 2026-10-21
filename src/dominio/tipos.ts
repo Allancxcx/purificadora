@@ -9,7 +9,7 @@ export type EstadoParada = 'pendiente' | 'en_camino' | 'llegada' | 'entregada' |
 export type OrigenInventario = 'ruta' | 'factura' | null
 export type EstadoVehiculo = 'disponible' | 'en_ruta' | 'taller' | 'baja'
 export type FormaCobro = 'efectivo' | 'transferencia' | 'tarjeta'
-export type OrigenAsiento = 'apertura' | 'compra' | 'factura' | 'nota_credito' | 'nota_debito' | 'cancelacion' | 'cobro' | 'despacho' | 'devolucion_ruta' | 'activo' | 'manual'
+export type OrigenAsiento = 'apertura' | 'compra' | 'factura' | 'nota_credito' | 'nota_debito' | 'cancelacion' | 'cobro' | 'pago' | 'despacho' | 'devolucion_ruta' | 'activo' | 'manual'
 export type ProveedorFel = 'simulado' | 'infile' | 'digifact' | 'g4s' | 'megaprint' | 'otro'
 export type AfiliacionIVA = 'GEN' | 'PEQ' | 'PEE' | 'AGR' | 'AGE'
 
@@ -290,6 +290,30 @@ export interface Cobro {
   numero: number
   forma: FormaCobro
   referencia: string
+  bancoId?: string
+  asientoId: string
+}
+
+export interface CuentaBancaria {
+  id: string
+  banco: string
+  nombre: string
+  numero: string
+  moneda: 'GTQ'
+  cuentaId: string
+  sucursalId: string
+  activa: boolean
+}
+
+export interface PagoProveedor {
+  id: string
+  fecha: string
+  sucursalId: string
+  socioId: string
+  ordenCompraId: string
+  bancoId: string
+  monto: number
+  referencia: string
   asientoId: string
 }
 
@@ -320,6 +344,7 @@ export interface LineaAsiento {
   detalle: string
   debe: number
   haber: number
+  bancoId?: string
 }
 
 export interface Asiento {
@@ -391,6 +416,8 @@ export interface Estado {
   precios: PrecioLista[]
   series: SerieDocumento[]
   cuentas: Cuenta[]
+  cuentasBancarias: CuentaBancaria[]
+  pagosProveedor: PagoProveedor[]
   ordenesVenta: OrdenVenta[]
   ordenesCompra: OrdenCompra[]
   facturas: Factura[]

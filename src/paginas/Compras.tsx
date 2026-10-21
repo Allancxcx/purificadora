@@ -1,13 +1,13 @@
 import { useState } from 'react'
 import { useErp } from '../datos/store'
-import { anularOrdenCompra, crearOrdenCompra, recibirOrdenCompra } from '../datos/motor'
-import { folio } from '../datos/consultas'
+import { anularOrdenCompra, crearOrdenCompra, pagarProveedor, recibirOrdenCompra } from '../datos/motor'
+import { bancosActivos, folio, saldoBanco, saldoCompra } from '../datos/consultas'
 import { totalesCompra } from '../dominio/calculos'
 import { formatoFecha, quetzales } from '../dominio/formato'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
 
 export function Compras() {
-  const { estado, sucursalActiva, sede, enVista, puede, ejecutar } = useErp()
+  const { estado, sucursalActiva, permitidas, sede, enVista, puede, ejecutar } = useErp()
   const [abierto, setAbierto] = useState(false)
   const sucursalId = sede
   const proveedores = estado.socios.filter((s) => s.roles.includes('proveedor') && s.estado === 'activo')
@@ -15,7 +15,12 @@ export function Compras() {
   const [socioId, setSocioId] = useState(proveedores[0]?.id ?? '')
   const [notas, setNotas] = useState('')
   const [lineas, setLineas] = useState([{ productoId: productos[0]?.id ?? '', cantidad: 40, costoUnitario: productos[0]?.costo ?? 0 }])
+  const [pago, setPago] = useState<string | null>(null)
+  const [monto, setMonto] = useState(0)
+  const [bancoId, setBancoId] = useState('ban-bi')
+  const [referencia, setReferencia] = useState('')
   const general = sucursalActiva === 'todas'
+  const bancos = bancosActivos(estado, permitidas)
   const ordenes = estado.ordenesCompra.filter((o) => enVista(o.sucursalId))
 
   function guardar(event: React.FormEvent) {
@@ -25,9 +30,9 @@ export function Compras() {
   }
 
   return (
-    <Pagina titulo="Órdenes de compra" detalle="El costo va sin IVA. Al recibir entra el inventario, el IVA crédito y la cuenta por pagar. La factura del proveedor no se ajusta con una nota de débito: ese documento solo se emite a un cliente." accion={puede('compras.editar') && <Boton onClick={() => setAbierto(true)}>Nueva compra</Boton>}>
+    <Pagina titulo="Órdenes de compra" detalle="El costo va sin IVA. Al recibir queda la cuenta por pagar. Pagala desde la cuenta bancaria que elijas. La factura del proveedor no se ajusta con una nota de débito: ese documento solo se emite a un cliente." accion={puede('compras.editar') && <Boton onClick={() => setAbierto(true)}>Nueva compra</Boton>}>
       <Tabla
-        columnas={['Documento', 'Fecha', ...(general ? ['Sucursal'] : []), 'Proveedor', 'Estado', 'Total', '']}
+        columnas={['Documento', 'Fecha', ...(general ? ['Sucursal'] : []), 'Proveedor', 'Estado', 'Total', 'Saldo', '']}
         vacio="No hay compras en esta sucursal."
         filas={ordenes.map((orden) => {
           const serie = estado.series.find((s) => s.id === orden.serieId)
@@ -40,12 +45,15 @@ export function Compras() {
               estado.socios.find((s) => s.id === orden.socioId)?.nombre,
               <Badge key="e" tono={orden.estado === 'recibida' ? 'ok' : orden.estado === 'anulada' ? 'peligro' : 'alerta'}>{orden.estado}</Badge>,
               quetzales(totalesCompra(orden.lineas).total),
+              orden.estado === 'recibida' ? quetzales(saldoCompra(estado, orden.id)) : '',
               puede('compras.editar') && orden.estado === 'borrador' ? (
                 <span key="a" className="flex gap-1">
                   <Boton onClick={() => ejecutar((e) => recibirOrdenCompra(e, orden.id))}>Recibir</Boton>
                   <Boton variante="peligro" onClick={() => ejecutar((e) => anularOrdenCompra(e, orden.id))}>Anular</Boton>
                 </span>
-              ) : <span key="v" className="text-xs text-slate-400">{orden.notas}</span>,
+              ) : puede('compras.editar') && orden.estado === 'recibida' && saldoCompra(estado, orden.id) > 0 ? (
+                <Boton key="p" onClick={() => { setPago(orden.id); setMonto(saldoCompra(estado, orden.id)); setReferencia(''); setBancoId(bancos[0]?.id ?? '') }}>Pagar</Boton>
+              ) : <span key="v" className="text-xs text-slate-400">{orden.estado === 'recibida' ? 'Pagada' : orden.notas}</span>,
             ],
           }
         })}
@@ -77,6 +85,23 @@ export function Compras() {
           <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, costoUnitario: productos[0].costo }])}>Agregar línea</Boton>
           <Campo etiqueta="Notas"><Texto value={notas} onChange={(e) => setNotas(e.target.value)} /></Campo>
           <Boton type="submit">Guardar compra</Boton>
+        </form>
+      </Modal>
+      <Modal titulo="Pagar al proveedor" abierto={Boolean(pago)} onCerrar={() => setPago(null)}>
+        <form className="space-y-3" onSubmit={(e) => {
+          e.preventDefault()
+          if (!pago) return
+          const resultado = ejecutar((actual) => pagarProveedor(actual, pago, monto, bancoId, referencia))
+          if (resultado.ok) setPago(null)
+        }}>
+          <Campo etiqueta="Cuenta bancaria">
+            <Lista value={bancoId} onChange={(e) => setBancoId(e.target.value)}>
+              {bancos.map((b) => <option key={b.id} value={b.id}>{b.nombre} · {quetzales(saldoBanco(estado, b.id))}</option>)}
+            </Lista>
+          </Campo>
+          <Campo etiqueta="Monto"><Texto type="number" step="0.01" value={monto} onChange={(e) => setMonto(Number(e.target.value))} /></Campo>
+          <Campo etiqueta="Referencia"><Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder="Número de transferencia" /></Campo>
+          <Boton type="submit">Registrar pago</Boton>
         </form>
       </Modal>
     </Pagina>

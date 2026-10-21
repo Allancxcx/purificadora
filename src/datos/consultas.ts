@@ -1,4 +1,4 @@
-import { redondear, totalesVenta } from '../dominio/calculos'
+import { CTA, redondear, totalesCompra, totalesVenta } from '../dominio/calculos'
 import { distanciaKm, interpolar, type Punto } from '../dominio/geo'
 import type { Estado, Factura, OrdenVenta, Ruta, SerieDocumento, TipoSerie, Usuario } from '../dominio/tipos'
 
@@ -65,6 +65,28 @@ export function saldoCuenta(estado: Estado, cuentaId: string, sucursalId?: strin
     }
   }
   return redondear(debe - haber)
+}
+
+export function bancosActivos(estado: Estado, permitidas: string[]) {
+  return estado.cuentasBancarias.filter((cuenta) => cuenta.activa && permitidas.includes(cuenta.sucursalId))
+}
+
+export function saldoBanco(estado: Estado, bancoId: string): number {
+  let neto = 0
+  for (const asiento of estado.asientos) {
+    for (const linea of asiento.lineas) {
+      if (linea.bancoId !== bancoId || linea.cuentaId !== CTA.bancos) continue
+      neto += linea.debe - linea.haber
+    }
+  }
+  return redondear(neto)
+}
+
+export function saldoCompra(estado: Estado, ordenId: string): number {
+  const orden = estado.ordenesCompra.find((item) => item.id === ordenId)
+  if (!orden || orden.estado !== 'recibida') return 0
+  const pagado = (estado.pagosProveedor ?? []).filter((pago) => pago.ordenCompraId === ordenId).reduce((suma, pago) => suma + pago.monto, 0)
+  return redondear(totalesCompra(orden.lineas).total - pagado)
 }
 
 export function saldoFactura(factura: Factura): number {

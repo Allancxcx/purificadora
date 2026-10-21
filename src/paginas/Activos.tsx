@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useErp } from '../datos/store'
 import { guardarVehiculo } from '../datos/motor'
-import { saldoCuenta } from '../datos/consultas'
+import { bancosActivos, saldoCuenta } from '../datos/consultas'
 import { CTA } from '../dominio/calculos'
 import { quetzales } from '../dominio/formato'
 import type { Vehiculo } from '../dominio/tipos'
@@ -20,6 +20,7 @@ const vacio = (sucursalId: string) => ({
   sucursalId,
   anio: 2024,
   valor: 0,
+  bancoId: 'ban-bi',
   estado: 'disponible' as Vehiculo['estado'],
 })
 
@@ -27,6 +28,7 @@ export function Activos() {
   const { estado, sucursalActiva, permitidas, sede, enVista, puede, ejecutar } = useErp()
   const [form, setForm] = useState<(ReturnType<typeof vacio> & { id?: string }) | null>(null)
   const sucursalDefault = sede
+  const bancos = bancosActivos(estado, permitidas)
   const visibles = estado.vehiculos.filter((v) => enVista(v.sucursalId))
   const valor = visibles.reduce((suma, vehiculo) => suma + vehiculo.valor, 0)
   const contable = saldoCuenta(estado, CTA.flota, sucursalActiva, permitidas)
@@ -38,7 +40,7 @@ export function Activos() {
   }
 
   return (
-    <Pagina titulo="Activos" detalle="Los vehículos son activos fijos. El alta entra a la cuenta 1501 y sale de bancos. Esta demostración no deprecia." accion={puede('activos.editar') && <Boton onClick={() => setForm(vacio(sucursalDefault))}>Nuevo vehículo</Boton>}>
+    <Pagina titulo="Activos" detalle="Los vehículos son activos fijos. El alta entra a la cuenta 1501 y sale de la cuenta bancaria elegida. Esta demostración no deprecia." accion={puede('activos.editar') && <Boton onClick={() => setForm(vacio(sucursalDefault))}>Nuevo vehículo</Boton>}>
       <div className="grid gap-3 sm:grid-cols-2">
         <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Costo de adquisición</div><div className="font-display mt-1 text-3xl">{quetzales(valor)}</div></Tarjeta>
         <Tarjeta><div className="text-xs uppercase tracking-[0.14em] text-slate-500">Cuenta 1501 · {sucursalActiva === 'todas' ? 'General' : estado.sucursales.find((s) => s.id === sucursalActiva)?.codigo}</div><div className="font-display mt-1 text-3xl">{quetzales(contable)}</div></Tarjeta>
@@ -48,7 +50,7 @@ export function Activos() {
         vacio="No hay vehículos en esta sucursal."
         filas={visibles.map((vehiculo) => ({
           id: vehiculo.id,
-          onClick: puede('activos.editar') ? () => setForm(vehiculo) : undefined,
+          onClick: puede('activos.editar') ? () => setForm({ ...vehiculo, bancoId: 'ban-bi' }) : undefined,
           celdas: [
             vehiculo.codigo,
             vehiculo.nombre,
@@ -89,8 +91,15 @@ export function Activos() {
                 <Texto type="number" step="0.01" min={0} value={form.valor} onChange={(e) => setForm({ ...form, valor: Number(e.target.value) })} />
               </Campo>
             )}
+            {!form.id && (
+              <Campo etiqueta="Cuenta que paga">
+                <Lista value={form.bancoId} onChange={(e) => setForm({ ...form, bancoId: e.target.value })}>
+                  {bancos.map((b) => <option key={b.id} value={b.id}>{b.banco} · {b.nombre}</option>)}
+                </Lista>
+              </Campo>
+            )}
             {form.id && <p className="text-sm text-slate-500 sm:col-span-2">Valor registrado: {quetzales(form.valor)}. El costo de adquisición no se vuelve a editar.</p>}
-            {!form.id && <p className="text-sm text-slate-500 sm:col-span-2">Ese importe se debita en 1501 y se acredita en bancos.</p>}
+            {!form.id && <p className="text-sm text-slate-500 sm:col-span-2">Ese importe se debita en 1501 y sale de la cuenta bancaria elegida. En cero no mueve bancos.</p>}
             <div className="sm:col-span-2"><Boton type="submit">Guardar</Boton></div>
           </form>
         )}

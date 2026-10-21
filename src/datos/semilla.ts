@@ -1,9 +1,9 @@
-import { CTA } from '../dominio/calculos'
+import { CTA, totalesCompra } from '../dominio/calculos'
 import { hace } from '../dominio/formato'
 import { TODAS_LAS_OPCIONES } from '../dominio/permisos'
 import type { AcuseFel, Estado, Producto, Rol, SerieDocumento, Socio, Sucursal } from '../dominio/tipos'
-import { flotaInicial, listasIniciales } from './catalogos'
-import { descuadre, precioLista, saldoCuenta, valorInventario } from './consultas'
+import { cuentasBancariasIniciales, flotaInicial, listasIniciales } from './catalogos'
+import { descuadre, precioLista, saldoBanco, saldoCompra, saldoCuenta, valorInventario } from './consultas'
 import { armarDte } from './dte'
 import {
   aplicarCertificacion,
@@ -16,6 +16,7 @@ import {
   entregarEnMostrador,
   iniciarRuta,
   marcarParada,
+  pagarProveedor,
   recibirOrdenCompra,
   registrarCobro,
   type Resultado,
@@ -74,10 +75,10 @@ export function construirSemilla(): Estado {
 
   const roles: Rol[] = [
     { id: 'rol-admin', nombre: 'Administración', descripcion: 'Toda la operación, incluyendo la handheld.', alcance: 'empresa', esRepartidor: false, sistema: true, opciones: TODAS_LAS_OPCIONES },
-    { id: 'rol-conta', nombre: 'Contabilidad', descripcion: 'Libros, facturas, cobros y certificación.', alcance: 'empresa', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'ventas.ver', 'compras.ver', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'fel.ver', 'inventario.ver', 'contabilidad.ver', 'contabilidad.editar', 'activos.ver', 'activos.editar', 'precios.ver', 'series.ver', 'empresa.ver'] },
-    { id: 'rol-ventas', nombre: 'Ventas', descripcion: 'Socios, órdenes, punto de venta y facturas de su sucursal.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'precios.ver', 'pos.operar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'rutas.ver'] },
-    { id: 'rol-bodega', nombre: 'Bodega', descripcion: 'Compras, recepción e inventario.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'compras.ver', 'compras.editar', 'inventario.ver', 'productos.editar', 'activos.ver'] },
-    { id: 'rol-gerente', nombre: 'Gerencia de sucursal', descripcion: 'Opera su sucursal, el punto de venta y las rutas.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'precios.ver', 'precios.editar', 'pos.operar', 'compras.ver', 'compras.editar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'inventario.ver', 'activos.ver', 'rutas.ver', 'rutas.despachar', 'sucursales.ver', 'series.ver'] },
+    { id: 'rol-conta', nombre: 'Contabilidad', descripcion: 'Libros, facturas, cobros y certificación.', alcance: 'empresa', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'ventas.ver', 'compras.ver', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'fel.ver', 'inventario.ver', 'contabilidad.ver', 'contabilidad.editar', 'bancos.ver', 'bancos.editar', 'activos.ver', 'activos.editar', 'precios.ver', 'series.ver', 'empresa.ver'] },
+    { id: 'rol-ventas', nombre: 'Ventas', descripcion: 'Socios, órdenes, punto de venta y facturas de su sucursal.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'precios.ver', 'pos.operar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'bancos.ver', 'rutas.ver'] },
+    { id: 'rol-bodega', nombre: 'Bodega', descripcion: 'Compras, recepción e inventario.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'compras.ver', 'compras.editar', 'inventario.ver', 'productos.editar', 'activos.ver', 'bancos.ver'] },
+    { id: 'rol-gerente', nombre: 'Gerencia de sucursal', descripcion: 'Opera su sucursal, el punto de venta y las rutas.', alcance: 'sucursal', esRepartidor: false, sistema: true, opciones: ['dashboard.ver', 'socios.ver', 'socios.editar', 'ventas.ver', 'ventas.editar', 'precios.ver', 'precios.editar', 'pos.operar', 'compras.ver', 'compras.editar', 'facturas.ver', 'facturas.emitir', 'facturas.cobrar', 'bancos.ver', 'inventario.ver', 'activos.ver', 'rutas.ver', 'rutas.despachar', 'sucursales.ver', 'series.ver'] },
     { id: 'rol-reparto', nombre: 'Repartidor', descripcion: 'Solo la handheld de su ruta.', alcance: 'sucursal', esRepartidor: true, sistema: true, opciones: ['reparto.operar'] },
   ]
 
@@ -170,6 +171,8 @@ export function construirSemilla(): Estado {
     listasPrecio: catalogo.listas,
     precios: catalogo.precios,
     series,
+    cuentasBancarias: cuentasBancariasIniciales(),
+    pagosProveedor: [],
     cuentas: [
       { id: '1101', codigo: '1101', nombre: 'Caja general', tipo: 'activo' },
       { id: '1102', codigo: '1102', nombre: 'Bancos', tipo: 'activo' },
@@ -200,13 +203,14 @@ export function construirSemilla(): Estado {
     ['suc-mix', 'prod-gar', 260], ['suc-mix', 'prod-bot', 36], ['suc-mix', 'prod-bol', 90], ['suc-mix', 'prod-dis', 4],
     ['suc-vn', 'prod-gar', 180], ['suc-vn', 'prod-bot', 24], ['suc-vn', 'prod-bol', 70], ['suc-vn', 'prod-dis', 3],
   ].map(([sucursalId, productoId, cantidad]) => ({ sucursalId: String(sucursalId), productoId: String(productoId), cantidad: Number(cantidad) }))
-  estado = paso(cargarSaldosIniciales(estado, cargas, 185000))
+  estado = paso(cargarSaldosIniciales(estado, cargas, 185000, 'ban-bi'))
 
   estado = paso(crearOrdenCompra(estado, {
     sucursalId: 'suc-z10', socioId: 'soc-plas', fecha: hace(8), notas: 'Reposición de garrafón',
     lineas: [{ productoId: 'prod-gar', cantidad: 80, costoUnitario: 7.5 }],
   }))
   estado = paso(recibirOrdenCompra(estado, estado.ordenesCompra[0].id, hace(8)))
+  estado = paso(pagarProveedor(estado, estado.ordenesCompra[0].id, 400, 'ban-bi', 'TR-88421', hace(7)))
 
   const vender = (socioId: string, sucursalId: string, fecha: string, lineas: { productoId: string; cantidad: number }[], confirmar = true) => {
     const persona = estado.socios.find((s) => s.id === socioId)
@@ -237,7 +241,7 @@ export function construirSemilla(): Estado {
     const emitida = listo(emitirFactura(estado, ordenId, fecha))
     estado = emitida.estado
     estado = certificar(estado, emitida.id, uuid)
-    if (cobro) estado = paso(registrarCobro(estado, emitida.id, cobro, 'transferencia', 'Depósito de demostración'))
+    if (cobro) estado = paso(registrarCobro(estado, emitida.id, cobro, 'transferencia', 'Depósito de demostración', 'ban-bi'))
   }
 
   facturarMostrador('soc-torre', 'suc-z10', hace(3), [{ productoId: 'prod-gar', cantidad: 12 }], 'A1B2C3D4-E5F6-47A8-9ABC-000000000101')
@@ -250,7 +254,7 @@ export function construirSemilla(): Estado {
     descripcion: 'Combustible de la flota',
     lineas: [
       { cuentaId: CTA.distribucion, detalle: 'Diésel de paneles', debe: 640, haber: 0 },
-      { cuentaId: CTA.bancos, detalle: 'Transferencia', debe: 0, haber: 640 },
+      { cuentaId: CTA.bancos, detalle: 'Transferencia · Monetaria operativa', debe: 0, haber: 640, bancoId: 'ban-bi' },
     ],
   }))
 
@@ -305,5 +309,9 @@ export function construirSemilla(): Estado {
   if (diferencia > 0.05) throw new Error(`Inventario contable no cuadra con el kardex (${diferencia})`)
   const valorFlota = estado.vehiculos.reduce((suma, vehiculo) => suma + vehiculo.valor, 0)
   if (Math.abs(saldoCuenta(estado, CTA.flota) - valorFlota) > 0.05) throw new Error('La cuenta 1501 no cuadra con el catálogo de vehículos')
+  const saldoBancos = estado.cuentasBancarias.reduce((suma, cuenta) => suma + saldoBanco(estado, cuenta.id), 0)
+  if (Math.abs(saldoBancos - saldoCuenta(estado, CTA.bancos)) > 0.05) throw new Error('Las cuentas bancarias no cuadran con la 1102')
+  const compraPagada = estado.ordenesCompra.find((orden) => orden.estado === 'recibida')
+  if (!compraPagada || Math.abs(saldoCompra(estado, compraPagada.id) - (totalesCompra(compraPagada.lineas).total - 400)) > 0.05) throw new Error('El saldo de la compra recibida no cuadra con el pago')
   return estado
 }

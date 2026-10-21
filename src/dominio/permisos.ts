@@ -24,6 +24,8 @@ export const CATALOGO_OPCIONES: Opcion[] = [
   { codigo: 'productos.editar', modulo: 'Inventario', nombre: 'Administrar productos' },
   { codigo: 'contabilidad.ver', modulo: 'Contabilidad', nombre: 'Ver libros y estados' },
   { codigo: 'contabilidad.editar', modulo: 'Contabilidad', nombre: 'Registrar asientos manuales' },
+  { codigo: 'bancos.ver', modulo: 'Contabilidad', nombre: 'Ver cuentas bancarias' },
+  { codigo: 'bancos.editar', modulo: 'Contabilidad', nombre: 'Registrar cuentas bancarias' },
   { codigo: 'activos.ver', modulo: 'Contabilidad', nombre: 'Ver la flota y sus activos' },
   { codigo: 'activos.editar', modulo: 'Contabilidad', nombre: 'Registrar vehículos' },
   { codigo: 'rutas.ver', modulo: 'Reparto', nombre: 'Monitorear rutas' },

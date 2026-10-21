@@ -23,6 +23,8 @@ export const ENDPOINTS = [
   ['POST', '/api/ordenes-venta', 'crearOrdenVenta'],
   ['POST', '/api/ordenes-compra', 'crearOrdenCompra'],
   ['POST', '/api/ordenes-compra/:id/recibir', 'recibirOrdenCompra'],
+  ['POST', '/api/ordenes-compra/:id/pagos', 'pagarProveedor'],
+  ['POST', '/api/bancos', 'guardarCuentaBancaria'],
   ['POST', '/api/facturas', 'emitirFactura / emitirNotaCredito / emitirNotaDebito'],
   ['POST', '/api/facturas/:id/cancelar', 'cancelarDocumento si está abierta; anularConCertificador si está cerrada'],
   ['POST', '/api/facturas/:id/certificar', 'armarDte + certificador + aplicarCertificacion'],

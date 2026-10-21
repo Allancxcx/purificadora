@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useErp } from '../datos/store'
 import { asientoManual } from '../datos/motor'
+import { bancosActivos } from '../datos/consultas'
 import { redondear } from '../dominio/calculos'
 import { fechaGT, formatoFecha, quetzales } from '../dominio/formato'
 import type { LineaAsiento } from '../dominio/tipos'
@@ -15,9 +16,10 @@ export function Contabilidad() {
   const [hasta, setHasta] = useState('')
   const [cuentaId, setCuentaId] = useState('1201')
   const [descripcion, setDescripcion] = useState('')
+  const bancos = bancosActivos(estado, permitidas)
   const [lineas, setLineas] = useState<LineaAsiento[]>([
     { cuentaId: '6102', detalle: '', debe: 0, haber: 0 },
-    { cuentaId: '1102', detalle: '', debe: 0, haber: 0 },
+    { cuentaId: '1102', detalle: '', debe: 0, haber: 0, bancoId: 'ban-bi' },
   ])
 
   const asientos = useMemo(() => estado.asientos.filter((a) => {
@@ -180,11 +182,16 @@ export function Contabilidad() {
               <Campo etiqueta="Descripción"><Texto value={descripcion} onChange={(e) => setDescripcion(e.target.value)} /></Campo>
               {lineas.map((linea, indice) => (
                 <div key={indice} className="grid grid-cols-[1.4fr_100px_100px] gap-2">
-                  <Lista value={linea.cuentaId} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cuentaId: e.target.value } : l))}>
+                  <Lista value={linea.cuentaId} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cuentaId: e.target.value, bancoId: e.target.value === '1102' ? (l.bancoId || bancos[0]?.id) : undefined } : l))}>
                     {estado.cuentas.map((c) => <option key={c.id} value={c.id}>{c.codigo} {c.nombre}</option>)}
                   </Lista>
                   <Texto type="number" step="0.01" placeholder="Debe" value={linea.debe || ''} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, debe: Number(e.target.value) } : l))} />
                   <Texto type="number" step="0.01" placeholder="Haber" value={linea.haber || ''} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, haber: Number(e.target.value) } : l))} />
+                  {linea.cuentaId === '1102' && (
+                    <Lista className="col-span-3" aria-label="Cuenta bancaria" value={linea.bancoId ?? ''} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, bancoId: e.target.value } : l))}>
+                      {bancos.map((b) => <option key={b.id} value={b.id}>{b.banco} · {b.nombre}</option>)}
+                    </Lista>
+                  )}
                 </div>
               ))}
               <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { cuentaId: '1101', detalle: '', debe: 0, haber: 0 }])}>Agregar línea</Boton>
