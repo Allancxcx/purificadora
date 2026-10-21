@@ -32,7 +32,7 @@ La demostración publicada está en GitHub Pages:
 
 https://allancxcx.github.io/purificadora/
 
-Entrá con `admin@manantial.gt` y la clave `manantial`. Desde ahí se puede recorrer el punto de venta, la empresa (razón social, nombre comercial, NIT, dirección y teléfono), la certificación y el libro diario. El sitio se regenera con cada push a `main`. La salida a producción, con API y certificador de pago, queda para después.
+Entrá con `admin@manantial.gt` y la clave `manantial`. Desde ahí se puede recorrer el punto de venta, la empresa (razón social, nombre comercial, NIT, dirección y teléfono), la certificación y el libro diario. El código está en `main` y la interfaz publicada sale de la rama `gh-pages`. La salida a producción, con API y certificador de pago, queda para después.
 
 En local:
 
