@@ -6,6 +6,7 @@ import { bancosActivos, esConsumidorFinal, saldoBanco, stock } from '../datos/co
 import { totalesVenta } from '../dominio/calculos'
 import { quetzales } from '../dominio/formato'
 import type { FormaCobro } from '../dominio/tipos'
+import { Buscador } from '../componentes/Buscador'
 import { Boton, Campo, Lista, Modal, Pagina, Texto } from '../componentes/ui'
 
 interface LineaPos {
@@ -129,9 +130,7 @@ export function Pos() {
         </div>
         <aside className="rounded-md bg-white p-4 shadow-sm ring-1 ring-slate-200">
           <Campo etiqueta="Cliente">
-            <Lista value={socioId} onChange={(e) => { setSocioId(e.target.value); setReceptorNombre(''); setSectorId('') }} className="bg-white text-[#083844]">
-              {clientes.map((s) => <option key={s.id} value={s.id}>{s.nombreComercial || s.nombre}</option>)}
-            </Lista>
+            <Buscador opciones={clientes.map((s) => ({ value: s.id, etiqueta: `${s.nombreComercial || s.nombre} · ${s.nit}` }))} value={socioId} onChange={(id) => { setSocioId(id); setReceptorNombre(''); setSectorId('') }} placeholder="Nombre o NIT" />
           </Campo>
           <Campo etiqueta="Camión">
             <Lista value={rutaId} onChange={(e) => { setRutaId(e.target.value); setCarrito([]); if (e.target.value) setForma('efectivo') }}>
@@ -144,10 +143,7 @@ export function Pos() {
             <div className="mt-3 space-y-3">
               <Campo etiqueta="A quién se vendió"><Texto value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} placeholder="Nombre de quien compra" /></Campo>
               <Campo etiqueta="Sector">
-                <Lista value={sectorId || rutaCamion?.sectorId || ''} onChange={(e) => setSectorId(e.target.value)}>
-                  <option value="">Elegí</option>
-                  {(estado.sectores ?? []).filter((sector) => sector.activo && sector.sucursalId === sucursalId).map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
-                </Lista>
+                <Buscador opciones={(estado.sectores ?? []).filter((sector) => sector.activo && sector.sucursalId === sucursalId).map((sector) => ({ value: sector.id, etiqueta: `${sector.codigo} · ${sector.nombre}` }))} value={sectorId || rutaCamion?.sectorId || ''} onChange={setSectorId} placeholder="Código o nombre del sector" />
               </Campo>
             </div>
           )}

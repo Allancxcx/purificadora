@@ -2,8 +2,9 @@ import { useMemo, useState } from 'react'
 import { useErp } from '../datos/store'
 import { guardarSocio } from '../datos/motor'
 import type { RolSocio, Socio } from '../dominio/tipos'
-import { DEPARTAMENTOS } from '../dominio/permisos'
-import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Tarjeta, Texto, Area } from '../componentes/ui'
+import { DEPARTAMENTOS_GT, municipiosDelDepartamento } from '../dominio/geografia'
+import { Buscador } from '../componentes/Buscador'
+import { Badge, Boton, Campo, Modal, Pagina, Tabla, Tarjeta, Texto, Area } from '../componentes/ui'
 import { SelectorMapa } from '../componentes/Mapa'
 
 type Borrador = Omit<Socio, 'id' | 'codigo'> & { id?: string }
@@ -74,18 +75,23 @@ export function Socios() {
             <Campo etiqueta="Nombre comercial"><Texto value={form.nombreComercial} onChange={(e) => setForm({ ...form, nombreComercial: e.target.value })} /></Campo>
             <Campo etiqueta="NIT o CF"><Texto value={form.nit} onChange={(e) => setForm({ ...form, nit: e.target.value })} required /></Campo>
             <Campo etiqueta="Sector">
-              <Lista value={form.sectorId ?? ''} onChange={(e) => {
-                const sector = estado.sectores?.find((item) => item.id === e.target.value)
-                setForm({ ...form, sectorId: e.target.value, sucursalId: sector?.sucursalId ?? form.sucursalId })
-              }}>
-                <option value="">Sin sector</option>
-                {(estado.sectores ?? []).filter((sector) => sector.activo && permitidas.includes(sector.sucursalId)).map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
-              </Lista>
+              <Buscador
+                opciones={[{ value: '', etiqueta: 'Sin sector' }, ...(estado.sectores ?? []).filter((sector) => sector.activo && permitidas.includes(sector.sucursalId)).map((sector) => ({ value: sector.id, etiqueta: `${sector.codigo} · ${sector.nombre}` }))]}
+                value={form.sectorId ?? ''}
+                onChange={(sectorId) => {
+                  const sector = estado.sectores?.find((item) => item.id === sectorId)
+                  setForm({ ...form, sectorId, sucursalId: sector?.sucursalId ?? form.sucursalId })
+                }}
+                placeholder="Código o nombre del sector"
+              />
             </Campo>
             <Campo etiqueta="Sucursal">
-              <Lista value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value, sectorId: '' })}>
-                {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-              </Lista>
+              <Buscador
+                opciones={estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => ({ value: s.id, etiqueta: s.nombre }))}
+                value={form.sucursalId}
+                onChange={(sucursalId) => setForm({ ...form, sucursalId, sectorId: '' })}
+                placeholder="Sucursal"
+              />
             </Campo>
             <p className="text-xs text-slate-500 sm:col-span-2">La sucursal sigue al sector. Si cambiás la sucursal, volvé a elegir el sector de esa tienda.</p>
             <div className="sm:col-span-2">
@@ -99,16 +105,27 @@ export function Socios() {
             <Campo etiqueta="Teléfono"><Texto value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} /></Campo>
             <Campo etiqueta="Correo"><Texto value={form.correo} onChange={(e) => setForm({ ...form, correo: e.target.value })} /></Campo>
             <Campo etiqueta="Dirección"><Texto value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} /></Campo>
-            <Campo etiqueta="Municipio"><Texto value={form.municipio} onChange={(e) => setForm({ ...form, municipio: e.target.value })} /></Campo>
             <Campo etiqueta="Departamento">
-              <Lista value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })}>
-                {DEPARTAMENTOS.map((d) => <option key={d}>{d}</option>)}
-              </Lista>
+              <Buscador
+                opciones={DEPARTAMENTOS_GT.map((d) => ({ value: d.nombre, etiqueta: `${d.codigo} · ${d.nombre}` }))}
+                value={form.departamento}
+                onChange={(departamento) => {
+                  const sigue = municipiosDelDepartamento(departamento).some((item) => item.nombre === form.municipio)
+                  setForm({ ...form, departamento, municipio: sigue ? form.municipio : '' })
+                }}
+                placeholder="Departamento"
+              />
+            </Campo>
+            <Campo etiqueta="Municipio">
+              <Buscador
+                opciones={municipiosDelDepartamento(form.departamento).map((item) => ({ value: item.nombre, etiqueta: `${item.codigo} · ${item.nombre}` }))}
+                value={form.municipio}
+                onChange={(municipio) => setForm({ ...form, municipio })}
+                placeholder="Municipio"
+              />
             </Campo>
             <Campo etiqueta="Lista de precios">
-              <Lista value={form.listaPrecioId ?? ''} onChange={(e) => setForm({ ...form, listaPrecioId: e.target.value })}>
-                {estado.listasPrecio.filter((l) => l.activa).map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
-              </Lista>
+              <Buscador opciones={estado.listasPrecio.filter((l) => l.activa).map((l) => ({ value: l.id, etiqueta: l.nombre }))} value={form.listaPrecioId ?? ''} onChange={(listaPrecioId) => setForm({ ...form, listaPrecioId })} placeholder="Lista de precios" />
             </Campo>
             <Campo etiqueta="Días de crédito"><Texto type="number" value={form.diasCredito} onChange={(e) => setForm({ ...form, diasCredito: Number(e.target.value) })} /></Campo>
             <Campo etiqueta="Límite de crédito"><Texto type="number" value={form.limiteCredito} onChange={(e) => setForm({ ...form, limiteCredito: Number(e.target.value) })} /></Campo>

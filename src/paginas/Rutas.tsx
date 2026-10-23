@@ -4,6 +4,7 @@ import { crearRuta, iniciarRuta, reintegrarExtra } from '../datos/motor'
 import { folio, kilometrosRuta, ordenDespachable, pendienteLinea, posicionRepartidor, sucursalesDe } from '../datos/consultas'
 import { distanciaKm } from '../dominio/geo'
 import { fechaGT } from '../dominio/formato'
+import { Buscador } from '../componentes/Buscador'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta } from '../componentes/ui'
 import { MapaRutas } from '../componentes/Mapa'
 
@@ -59,7 +60,7 @@ export function Rutas() {
   const disponibles = estado.ordenesVenta.filter((o) => {
     if (o.sucursalId !== sucursalId || !ordenDespachable(estado, o)) return false
     const sectorOrden = o.sectorId || estado.socios.find((s) => s.id === o.socioId)?.sectorId
-    return !sectorId || !sectorOrden || sectorOrden === sectorId
+    return Boolean(sectorId) && sectorOrden === sectorId
   })
   const productosExtra = estado.productos.filter((p) => p.activo && p.controlaInventario)
 
@@ -156,38 +157,27 @@ export function Rutas() {
             </Lista>
           </Campo>
           <Campo etiqueta="Repartidor">
-            <Lista value={repartidorId} onChange={(e) => setRepartidorId(e.target.value)} required>
-              <option value="">Elegí</option>
-              {repartidores.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
-            </Lista>
+            <Buscador required opciones={repartidores.map((u) => ({ value: u.id, etiqueta: u.nombre }))} value={repartidorId} onChange={setRepartidorId} placeholder="Nombre del repartidor" />
           </Campo>
           <Campo etiqueta="Sector">
-            <Lista value={sectorId} onChange={(e) => { setSectorId(e.target.value); setOrdenes([]) }} required>
-              <option value="">Elegí</option>
-              {sectores.map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
-            </Lista>
+            <Buscador required opciones={sectores.map((sector) => ({ value: sector.id, etiqueta: `${sector.codigo} · ${sector.nombre}` }))} value={sectorId} onChange={(id) => { setSectorId(id); setOrdenes([]) }} placeholder="Código o nombre del sector" />
           </Campo>
           <Campo etiqueta="Vehículo">
-            <Lista value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} required>
-              <option value="">Elegí</option>
-              {flota.map((v) => <option key={v.id} value={v.id}>{v.nombre} · {v.placa}</option>)}
-            </Lista>
+            <Buscador required opciones={flota.map((v) => ({ value: v.id, etiqueta: `${v.nombre} · ${v.placa}` }))} value={vehiculoId} onChange={setVehiculoId} placeholder="Nombre o placa" />
           </Campo>
           {flota.length === 0 && <p className="text-sm text-slate-500">No hay vehículos disponibles en esta sucursal.</p>}
           <div className="space-y-2">
             <p className="text-xs text-slate-500">Extra que sube además de los pedidos. Al salir se contabiliza. Lo que no se venda vuelve a bodega.</p>
             {extras.map((extra, indice) => (
               <div key={indice} className="grid grid-cols-[1fr_5rem] gap-2">
-                <Lista aria-label="Producto extra" value={extra.productoId} onChange={(e) => setExtras(extras.map((item, i) => i === indice ? { ...item, productoId: e.target.value } : item))}>
-                  {productosExtra.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-                </Lista>
+                <Buscador ariaLabel="Producto extra" opciones={productosExtra.map((p) => ({ value: p.id, etiqueta: p.nombre }))} value={extra.productoId} onChange={(productoId) => setExtras(extras.map((item, i) => i === indice ? { ...item, productoId } : item))} placeholder="Producto" />
                 <input className="rounded border border-[#c5cdd2] bg-white px-2 py-1 text-right" aria-label="Cantidad extra" type="number" min={1} value={extra.cantidad} onChange={(e) => setExtras(extras.map((item, i) => i === indice ? { ...item, cantidad: Number(e.target.value) } : item))} />
               </div>
             ))}
             <Boton type="button" variante="secundario" onClick={() => setExtras([...extras, { productoId: productosExtra[0]?.id ?? '', cantidad: 1 }])}>Agregar extra</Boton>
           </div>
           <div className="max-h-72 space-y-2 overflow-auto">
-            <p className="text-xs text-slate-500">Marcá la orden y escribí cuánto sube al camión. Lo que dejes en cero no sale y queda para otra ruta.</p>
+            <p className="text-xs text-slate-500">Solo aparecen órdenes confirmadas de este sector y de esta sucursal. Una orden de otro sector, o sin sector, no sube al camión.</p>
             {disponibles.map((orden) => {
               const serie = estado.series.find((s) => s.id === orden.serieId)
               const marcada = ordenes.includes(orden.id)
@@ -235,7 +225,7 @@ export function Rutas() {
                 </div>
               )
             })}
-            {disponibles.length === 0 && <p className="text-sm text-slate-500">No hay órdenes confirmadas sin ruta en esta sucursal.</p>}
+            {disponibles.length === 0 && <p className="text-sm text-slate-500">No hay órdenes confirmadas de este sector pendientes de subir al camión.</p>}
           </div>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={salir} onChange={(e) => setSalir(e.target.checked)} /> Salir ahora y descontar bodega</label>
           <Boton type="submit">Crear ruta</Boton>

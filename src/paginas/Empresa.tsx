@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useErp } from '../datos/store'
 import { guardarEmpresa } from '../datos/motor'
-import { DEPARTAMENTOS } from '../dominio/permisos'
+import { DEPARTAMENTOS_GT, municipiosDelDepartamento } from '../dominio/geografia'
 import type { Empresa as DatosEmpresa } from '../dominio/tipos'
-import { Boton, Campo, Lista, Pagina, Tarjeta, Texto } from '../componentes/ui'
+import { Buscador } from '../componentes/Buscador'
+import { Boton, Campo, Pagina, Tarjeta, Texto } from '../componentes/ui'
 
 export function EmpresaPagina() {
   const { estado, puede, ejecutar } = useErp()
@@ -25,11 +26,11 @@ export function EmpresaPagina() {
           <h2 className="font-display text-2xl">Contacto y domicilio fiscal</h2>
           <Campo etiqueta="Dirección"><Texto value={empresa.direccion} disabled={!editar} onChange={(e) => set({ direccion: e.target.value })} /></Campo>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Campo etiqueta="Municipio"><Texto value={empresa.municipio} disabled={!editar} onChange={(e) => set({ municipio: e.target.value })} /></Campo>
             <Campo etiqueta="Departamento">
-              <Lista value={empresa.departamento} disabled={!editar} onChange={(e) => set({ departamento: e.target.value })}>
-                {DEPARTAMENTOS.map((d) => <option key={d}>{d}</option>)}
-              </Lista>
+              <Buscador disabled={!editar} opciones={DEPARTAMENTOS_GT.map((d) => ({ value: d.nombre, etiqueta: `${d.codigo} · ${d.nombre}` }))} value={empresa.departamento} onChange={(departamento) => set({ departamento, municipio: municipiosDelDepartamento(departamento).some((item) => item.nombre === empresa.municipio) ? empresa.municipio : '' })} placeholder="Departamento" />
+            </Campo>
+            <Campo etiqueta="Municipio">
+              <Buscador disabled={!editar} opciones={municipiosDelDepartamento(empresa.departamento).map((item) => ({ value: item.nombre, etiqueta: `${item.codigo} · ${item.nombre}` }))} value={empresa.municipio} onChange={(municipio) => set({ municipio })} placeholder="Municipio" />
             </Campo>
           </div>
           <div className="grid gap-3 sm:grid-cols-2">

@@ -53,7 +53,7 @@ export const ETIQUETA_SERIE: Record<string, string> = {
   RECIBO: 'Recibo de caja',
 }
 
-export const DEPARTAMENTOS = ['Guatemala', 'Sacatepéquez', 'Escuintla', 'Chimaltenango', 'Santa Rosa', 'El Progreso', 'Jutiapa', 'Quetzaltenango']
+export { DEPARTAMENTOS } from './geografia'
 
 export const FRASES_ISR = [
   { tipo: 1, escenario: 1, texto: 'Sujeto a pagos trimestrales ISR' },

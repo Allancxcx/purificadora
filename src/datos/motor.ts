@@ -201,6 +201,7 @@ export function guardarSocio(entrada: Estado, input: Omit<Socio, 'id' | 'codigo'
   const sector = input.sectorId ? estado.sectores?.find((item) => item.id === input.sectorId && item.activo) : undefined
   if (input.sectorId && !sector) return { ok: false, error: 'Ese sector no está activo.' }
   if (sector && sector.sucursalId !== input.sucursalId) return { ok: false, error: 'La sucursal del socio tiene que ser la del sector.' }
+  if (input.roles.includes('cliente') && !esConsumidorFinal(input.nit) && !sector) return { ok: false, error: 'El cliente necesita el sector de su sucursal.' }
   const socioInput = { ...input, listaPrecioId, sectorId: sector?.id }
   if (input.id) {
     const actual = estado.socios.find((s) => s.id === input.id)
@@ -394,12 +395,11 @@ export function crearOrdenVenta(entrada: Estado, input: NuevaVenta): Resultado {
   if ('error' in lineas) return { ok: false, error: lineas.error }
   const sectorId = input.sectorId || socio.sectorId
   const sector = sectorId ? estado.sectores?.find((item) => item.id === sectorId && item.activo) : undefined
-  if (sectorId && !sector) return { ok: false, error: 'Ese sector no está activo.' }
-  if (sector && sector.sucursalId !== input.sucursalId) return { ok: false, error: 'El sector pertenece a otra sucursal.' }
+  if (!sector) return { ok: false, error: 'Elegí el sector de la venta.' }
+  if (sector.sucursalId !== input.sucursalId) return { ok: false, error: 'El sector pertenece a otra sucursal.' }
   const ocasional = esConsumidorFinal(socio.nit)
   const receptorNombre = input.receptorNombre?.trim() ?? ''
   if (ocasional && input.facturar !== false && receptorNombre.length < 3) return { ok: false, error: 'En consumidor final indicá a quién se le vendió.' }
-  if (ocasional && input.facturar !== false && !sector) return { ok: false, error: 'En consumidor final elegí el sector.' }
   const numero = tomarNumero(estado, serie.id)
   if ('error' in numero) return { ok: false, error: numero.error }
   const orden: OrdenVenta = {
@@ -1032,7 +1032,7 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
     }
     const socioSector = estado.socios.find((s) => s.id === orden.socioId)
     const sectorOrden = orden.sectorId || socioSector?.sectorId
-    if (sectorOrden && sectorOrden !== sector.id) return { ok: false, error: 'La orden es de otro sector.' }
+    if (sectorOrden !== sector.id) return { ok: false, error: sectorOrden ? 'La orden es de otro sector.' : 'La orden no tiene sector. Asignalo antes de subirla al camión.' }
     if (facturaVigente(estado, orden.id) && orden.origenInventario === 'factura') {
       return { ok: false, error: 'Una orden ya facturada en mostrador no se sube al camión.' }
     }
@@ -1555,6 +1555,20 @@ export function guardarSector(entrada: Estado, input: { id?: string; departament
 export function completarCatalogos(entrada: Estado): Estado {
   const estado = clonar(entrada)
   if (!estado.sectores?.length) estado.sectores = sectoresIniciales()
+  const oficial: Record<string, { departamentoCodigo: string; municipioCodigo: string; sector: string }> = {
+    'sec-z10-1': { departamentoCodigo: '01', municipioCodigo: '01', sector: '1' },
+    'sec-z10-2': { departamentoCodigo: '01', municipioCodigo: '01', sector: '2' },
+    'sec-mix-1': { departamentoCodigo: '01', municipioCodigo: '08', sector: '1' },
+    'sec-vn-1': { departamentoCodigo: '01', municipioCodigo: '15', sector: '1' },
+  }
+  for (const sector of estado.sectores) {
+    const destino = oficial[sector.id]
+    if (!destino || sector.departamentoCodigo.length === 2) continue
+    sector.departamentoCodigo = destino.departamentoCodigo
+    sector.municipioCodigo = destino.municipioCodigo
+    sector.sector = destino.sector
+    sector.codigo = codigoSector(destino.departamentoCodigo, destino.municipioCodigo, destino.sector)
+  }
   if (!estado.siguienteInterno) estado.siguienteInterno = 1
   if (!estado.cuentasBancarias?.length) estado.cuentasBancarias = cuentasBancariasIniciales()
   if (!estado.pagosProveedor) estado.pagosProveedor = []

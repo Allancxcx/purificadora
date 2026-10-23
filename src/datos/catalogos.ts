@@ -28,10 +28,10 @@ export function sectoresIniciales(): Sector[] {
     activo: true,
   })
   return [
-    armar('sec-z10-1', '02001', '01', '1', 'Zona 10 sector 1', 'suc-z10'),
-    armar('sec-z10-2', '02001', '02', '2', 'Zona 10 sector 2', 'suc-z10'),
-    armar('sec-mix-1', '02002', '01', '1', 'Mixco sector 1', 'suc-mix'),
-    armar('sec-vn-1', '02003', '01', '1', 'Villa Nueva sector 1', 'suc-vn'),
+    armar('sec-z10-1', '01', '01', '1', 'Zona 10 sector 1', 'suc-z10'),
+    armar('sec-z10-2', '01', '01', '2', 'Zona 10 sector 2', 'suc-z10'),
+    armar('sec-mix-1', '01', '08', '1', 'Mixco sector 1', 'suc-mix'),
+    armar('sec-vn-1', '01', '15', '1', 'Villa Nueva sector 1', 'suc-vn'),
   ]
 }
 

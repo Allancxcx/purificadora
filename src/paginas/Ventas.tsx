@@ -4,6 +4,8 @@ import { anularOrdenVenta, cerrarVentaInterna, confirmarOrdenVenta, crearOrdenVe
 import { esConsumidorFinal, facturaVigente, folio, listaDelSocio, precioLista } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { formatoFecha, quetzales } from '../dominio/formato'
+import { Buscador } from '../componentes/Buscador'
+import { LineasDocumento } from '../componentes/LineasDocumento'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
 
 interface LineaForm { productoId: string; cantidad: number; precioUnitario: number; descuento: number }
@@ -95,12 +97,10 @@ export function Ventas() {
           }
         })}
       />
-      <Modal titulo="Nueva orden de venta" abierto={abierto} onCerrar={() => setAbierto(false)}>
+      <Modal titulo="Nueva orden de venta" abierto={abierto} onCerrar={() => setAbierto(false)} ancho="max-w-4xl">
         <form className="space-y-3" onSubmit={guardar}>
           <Campo etiqueta="Cliente">
-            <Lista value={socioId} onChange={(e) => elegirSocio(e.target.value)}>
-              {clientes.map((s) => <option key={s.id} value={s.id}>{s.nombre} · {s.nit}</option>)}
-            </Lista>
+            <Buscador opciones={clientes.map((s) => ({ value: s.id, etiqueta: `${s.nombre} · ${s.nit}` }))} value={socioId} onChange={elegirSocio} placeholder="Nombre o NIT" />
           </Campo>
           <Campo etiqueta="Dirección de entrega"><Texto value={direccion} onChange={(e) => setDireccion(e.target.value)} /></Campo>
           <Campo etiqueta="Ventana"><Texto value={ventana} onChange={(e) => setVentana(e.target.value)} /></Campo>
@@ -109,38 +109,14 @@ export function Ventas() {
               {estado.listasPrecio.filter((l) => l.activa).map((l) => <option key={l.id} value={l.id}>{l.nombre}</option>)}
             </Lista>
           </Campo>
-          <p className="text-xs text-[#5c6770]">El precio sale de la lista e incluye IVA. Podés cambiarlo en la línea. El descuento se resta en quetzales.</p>
-          <div className="grid grid-cols-[minmax(0,1.4fr)_4.5rem_5.5rem_5.5rem] gap-2 text-xs font-semibold text-[#5c6770]">
-            <span>Producto</span>
-            <span>Cant.</span>
-            <span>Precio</span>
-            <span>Desc.</span>
-          </div>
-          {lineas.map((linea, indice) => (
-            <div key={indice} className="grid grid-cols-[minmax(0,1.4fr)_4.5rem_5.5rem_5.5rem] gap-2">
-              <Lista aria-label="Producto" value={linea.productoId} onChange={(e) => {
-                const producto = productos.find((p) => p.id === e.target.value)
-                setLineas(lineas.map((l, i) => i === indice ? { ...l, productoId: e.target.value, precioUnitario: producto ? precioLista(estado, listaId, producto.id) : l.precioUnitario } : l))
-              }}>
-                {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Lista>
-              <Texto aria-label="Cantidad" type="number" min={1} value={linea.cantidad} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cantidad: Number(e.target.value) } : l))} />
-              <Texto aria-label="Precio unitario" type="number" step="0.01" value={linea.precioUnitario} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, precioUnitario: Number(e.target.value) } : l))} />
-              <Texto aria-label="Descuento" type="number" step="0.01" value={linea.descuento} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, descuento: Number(e.target.value) } : l))} />
-            </div>
-          ))}
-          <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, precioUnitario: precioLista(estado, listaId, productos[0].id), descuento: 0 }])}>Agregar línea</Boton>
+          <p className="text-xs text-[#5c6770]">El precio sale de la lista e incluye IVA. El importe de la línea ya lo trae. El subtotal es la base y el descuento se resta en quetzales.</p>
+          <LineasDocumento modo="venta" productos={productos} lineas={lineas} onChange={setLineas} precioDe={(productoId) => precioLista(estado, listaId, productoId)} />
           <Campo etiqueta="Notas"><Texto value={notas} onChange={(e) => setNotas(e.target.value)} /></Campo>
+          <Campo etiqueta="Sector">
+            <Buscador required opciones={(estado.sectores ?? []).filter((sector) => sector.activo && sector.sucursalId === sucursalId).map((sector) => ({ value: sector.id, etiqueta: `${sector.codigo} · ${sector.nombre}` }))} value={sectorId} onChange={setSectorId} placeholder="Código o nombre del sector" />
+          </Campo>
           {esConsumidorFinal(estado.socios.find((s) => s.id === socioId)?.nit ?? '') && (
-            <>
-              <Campo etiqueta="A quién se vendió"><Texto value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} placeholder="Nombre de quien recibe" /></Campo>
-              <Campo etiqueta="Sector">
-                <Lista value={sectorId} onChange={(e) => setSectorId(e.target.value)}>
-                  <option value="">Elegí</option>
-                  {(estado.sectores ?? []).filter((sector) => sector.activo && sector.sucursalId === sucursalId).map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
-                </Lista>
-              </Campo>
-            </>
+            <Campo etiqueta="A quién se vendió"><Texto value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} placeholder="Nombre de quien recibe" /></Campo>
           )}
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={confirmar} onChange={(e) => setConfirmar(e.target.checked)} /> Confirmar al guardar</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={!facturar} onChange={(e) => setFacturar(!e.target.checked)} /> No enviar a facturar. Queda una venta interna, sin certificación FEL.</label>

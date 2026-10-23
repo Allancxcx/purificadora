@@ -20,7 +20,7 @@ export function codigoSector(departamentoCodigo: string, municipioCodigo: string
   const departamento = departamentoCodigo.trim()
   const municipio = municipioCodigo.trim()
   const numero = sector.trim()
-  if (numero.length === 1 && municipio.endsWith(numero)) return `${departamento}${municipio}`
+  if (departamento.length > 2 && numero.length === 1 && municipio.endsWith(numero)) return `${departamento}${municipio}`
   return `${departamento}${municipio}${numero}`
 }
 

@@ -40,14 +40,25 @@ const NAV = [
   { to: '/empresa', codigo: 'empresa.ver', label: 'Empresa', icon: Landmark, fin: false },
 ]
 
+function menuInicial() {
+  const guardado = localStorage.getItem('manantial.menu')
+  if (guardado === 'abierto') return true
+  if (guardado === 'cerrado') return false
+  return window.innerWidth >= 1024
+}
+
 export function Shell() {
   const { estado, sesion, rol, sucursalActiva, permitidas, enVista, setSucursalActiva, puede, salir, restaurar } = useErp()
-  const [abierto, setAbierto] = useState(false)
+  const [menuAbierto, setMenuAbierto] = useState(menuInicial)
   const [tour, setTour] = useState(() => localStorage.getItem('manantial.tour') !== 'visto')
   const navigate = useNavigate()
   const prepararTour = useCallback((paso: PasoTour) => {
-    if (window.innerWidth < 1024 && paso.selector.startsWith('[data-tour="nav')) setAbierto(true)
+    if (paso.selector.startsWith('[data-tour="nav') || paso.selector === '[data-tour="menu"]' || paso.selector === '[data-tour="marca"]') setMenuAbierto(true)
   }, [])
+  function fijarMenu(abierto: boolean) {
+    localStorage.setItem('manantial.menu', abierto ? 'abierto' : 'cerrado')
+    setMenuAbierto(abierto)
+  }
   function cerrarTour() {
     localStorage.setItem('manantial.tour', 'visto')
     setTour(false)
@@ -59,14 +70,15 @@ export function Shell() {
     <div className="flex h-full flex-col bg-[#083844] text-white">
       <div className="flex items-center gap-3 px-4 py-4" data-tour="marca">
         <span className="grid h-9 w-9 place-items-center rounded bg-cyan-300 text-[#083844]"><Droplets size={18} /></span>
-        <div>
+        <div className="min-w-0">
           <div className="font-display text-xl leading-none">{estado.empresa.nombreComercial}</div>
           <div className="text-[11px] uppercase tracking-[0.16em] text-cyan-100/80">Purificadora</div>
         </div>
+        <button type="button" className="ml-auto grid h-8 w-8 place-items-center rounded text-cyan-50 hover:bg-white/10 lg:hidden" onClick={() => fijarMenu(false)} aria-label="Cerrar menú"><X size={16} /></button>
       </div>
       <nav className="flex-1 space-y-0.5 overflow-auto px-2 pb-4" data-tour="menu">
         {NAV.filter((item) => puede(item.codigo)).map((item) => (
-          <NavLink key={item.to} to={item.to} end={item.fin} data-tour={`nav-${item.to.replace('/', '') || 'inicio'}`} onClick={() => setAbierto(false)} className={({ isActive }) => cx('flex items-center gap-3 rounded px-3 py-2 text-sm', isActive ? 'bg-white text-[#083844]' : 'text-cyan-50 hover:bg-white/10')}>
+          <NavLink key={item.to} to={item.to} end={item.fin} data-tour={`nav-${item.to.replace('/', '') || 'inicio'}`} onClick={() => { if (window.innerWidth < 1024) fijarMenu(false) }} className={({ isActive }) => cx('flex items-center gap-3 rounded px-3 py-2 text-sm', isActive ? 'bg-white text-[#083844]' : 'text-cyan-50 hover:bg-white/10')}>
             <item.icon size={18} />
             <span>{item.label}</span>
             {item.to === '/rutas' && enCurso > 0 && <span className="ml-auto rounded-full bg-amber-300 px-2 py-0.5 text-[11px] font-semibold text-[#083844]">{enCurso}</span>}
@@ -78,17 +90,12 @@ export function Shell() {
   )
 
   return (
-    <div className="min-h-screen lg:grid lg:grid-cols-[250px_1fr]">
-      <aside className="hidden lg:block">{lateral}</aside>
-      {abierto && (
-        <div className="fixed inset-0 z-40 lg:hidden">
-          <button className="absolute inset-0 bg-black/40" onClick={() => setAbierto(false)} aria-label="Cerrar menú" />
-          <div className="relative h-full w-[260px]">{lateral}</div>
-        </div>
-      )}
-      <div className="min-w-0">
+    <div className="min-h-screen">
+      {menuAbierto && <button type="button" className="fixed inset-0 z-40 bg-black/40 lg:hidden" onClick={() => fijarMenu(false)} aria-label="Cerrar menú" />}
+      <aside className={cx('no-imprimir fixed inset-y-0 left-0 z-50 w-[260px] transition-transform duration-200', menuAbierto ? 'translate-x-0' : '-translate-x-full')}>{lateral}</aside>
+      <div className={cx('min-w-0 transition-[padding] duration-200', menuAbierto && 'lg:pl-[260px]')}>
         <header className="no-imprimir sticky top-0 z-30 flex flex-wrap items-center gap-2 border-b border-[#d5dde2] bg-white px-3 py-2">
-          <button className="grid h-9 w-9 place-items-center rounded border border-[#d5dde2] lg:hidden" onClick={() => setAbierto(true)} aria-label="Abrir menú"><Menu size={18} /></button>
+          <button type="button" className="grid h-9 w-9 place-items-center rounded border border-[#d5dde2]" onClick={() => fijarMenu(!menuAbierto)} aria-label={menuAbierto ? 'Cerrar menú' : 'Abrir menú'} aria-expanded={menuAbierto}><Menu size={18} /></button>
           <label className="flex items-center gap-2 text-sm" data-tour="sucursal">
             <span className="text-xs font-semibold uppercase tracking-[0.12em] text-[#5c6770]">Vista</span>
             {opcionesVista.length > 1 ? (

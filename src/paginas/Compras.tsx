@@ -5,6 +5,8 @@ import { bancosActivos, folio, saldoBanco, saldoCompra } from '../datos/consulta
 import { totalesCompra } from '../dominio/calculos'
 import { formatoFecha, quetzales } from '../dominio/formato'
 import type { FormaCobro } from '../dominio/tipos'
+import { Buscador } from '../componentes/Buscador'
+import { LineasDocumento } from '../componentes/LineasDocumento'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
 
 export function Compras() {
@@ -62,31 +64,13 @@ export function Compras() {
           }
         })}
       />
-      <Modal titulo="Nueva orden de compra" abierto={abierto} onCerrar={() => setAbierto(false)}>
+      <Modal titulo="Nueva orden de compra" abierto={abierto} onCerrar={() => setAbierto(false)} ancho="max-w-4xl">
         <form className="space-y-3" onSubmit={guardar}>
           <Campo etiqueta="Proveedor">
-            <Lista value={socioId} onChange={(e) => setSocioId(e.target.value)}>
-              {proveedores.map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-            </Lista>
+            <Buscador opciones={proveedores.map((s) => ({ value: s.id, etiqueta: `${s.nombre} · ${s.nit}` }))} value={socioId} onChange={setSocioId} placeholder="Nombre o NIT" />
           </Campo>
-          <div className="grid grid-cols-[1.4fr_80px_100px] gap-2 text-xs font-semibold text-[#5c6770]">
-            <span>Producto</span>
-            <span>Cantidad</span>
-            <span>Costo Q</span>
-          </div>
-          {lineas.map((linea, indice) => (
-            <div key={indice} className="grid grid-cols-[1.4fr_80px_100px] gap-2">
-              <Lista aria-label="Producto" value={linea.productoId} onChange={(e) => {
-                const producto = productos.find((p) => p.id === e.target.value)
-                setLineas(lineas.map((l, i) => i === indice ? { ...l, productoId: e.target.value, costoUnitario: producto?.costo ?? l.costoUnitario } : l))
-              }}>
-                {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
-              </Lista>
-              <Texto aria-label="Cantidad" type="number" min={1} value={linea.cantidad} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, cantidad: Number(e.target.value) } : l))} />
-              <Texto aria-label="Costo unitario" type="number" step="0.01" value={linea.costoUnitario} onChange={(e) => setLineas(lineas.map((l, i) => i === indice ? { ...l, costoUnitario: Number(e.target.value) } : l))} />
-            </div>
-          ))}
-          <Boton type="button" variante="secundario" onClick={() => setLineas([...lineas, { productoId: productos[0].id, cantidad: 1, costoUnitario: productos[0].costo }])}>Agregar línea</Boton>
+          <p className="text-xs text-[#5c6770]">El costo de la línea es sin IVA. El subtotal suma esos importes y el IVA se calcula al 12%.</p>
+          <LineasDocumento modo="compra" productos={productos} lineas={lineas} onChange={setLineas} />
           <Campo etiqueta="Notas"><Texto value={notas} onChange={(e) => setNotas(e.target.value)} /></Campo>
           <Boton type="submit">Guardar compra</Boton>
         </form>

@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useErp } from '../datos/store'
 import { guardarSucursal } from '../datos/motor'
 import type { Sucursal } from '../dominio/tipos'
-import { DEPARTAMENTOS } from '../dominio/permisos'
-import { Badge, Boton, Campo, Lista, Modal, Pagina, Tarjeta, Texto } from '../componentes/ui'
+import { DEPARTAMENTOS_GT, municipiosDelDepartamento } from '../dominio/geografia'
+import { Buscador } from '../componentes/Buscador'
+import { Badge, Boton, Campo, Modal, Pagina, Tarjeta, Texto } from '../componentes/ui'
 
 const vacia = (): Omit<Sucursal, 'id'> => ({
   codigo: '', nombre: '', establecimientoSat: 4, direccion: '', municipio: 'Guatemala', departamento: 'Guatemala', codigoPostal: 1010, telefono: '', esMatriz: false, activa: true, lat: 14.63, lng: -90.51,
@@ -38,11 +39,11 @@ export function Sucursales() {
             <Campo etiqueta="Establecimiento SAT"><Texto type="number" value={form.establecimientoSat} onChange={(e) => setForm({ ...form, establecimientoSat: Number(e.target.value) })} /></Campo>
             <Campo etiqueta="Código postal"><Texto type="number" value={form.codigoPostal} onChange={(e) => setForm({ ...form, codigoPostal: Number(e.target.value) })} /></Campo>
             <div className="sm:col-span-2"><Campo etiqueta="Dirección"><Texto value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} /></Campo></div>
-            <Campo etiqueta="Municipio"><Texto value={form.municipio} onChange={(e) => setForm({ ...form, municipio: e.target.value })} /></Campo>
             <Campo etiqueta="Departamento">
-              <Lista value={form.departamento} onChange={(e) => setForm({ ...form, departamento: e.target.value })}>
-                {DEPARTAMENTOS.map((d) => <option key={d}>{d}</option>)}
-              </Lista>
+              <Buscador opciones={DEPARTAMENTOS_GT.map((d) => ({ value: d.nombre, etiqueta: `${d.codigo} · ${d.nombre}` }))} value={form.departamento} onChange={(departamento) => setForm({ ...form, departamento, municipio: municipiosDelDepartamento(departamento).some((item) => item.nombre === form.municipio) ? form.municipio : '' })} placeholder="Departamento" />
+            </Campo>
+            <Campo etiqueta="Municipio">
+              <Buscador opciones={municipiosDelDepartamento(form.departamento).map((item) => ({ value: item.nombre, etiqueta: `${item.codigo} · ${item.nombre}` }))} value={form.municipio} onChange={(municipio) => setForm({ ...form, municipio })} placeholder="Municipio" />
             </Campo>
             <Campo etiqueta="Teléfono"><Texto value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} /></Campo>
             <Campo etiqueta="Latitud"><Texto type="number" step="0.0001" value={form.lat} onChange={(e) => setForm({ ...form, lat: Number(e.target.value) })} /></Campo>
