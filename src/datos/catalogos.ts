@@ -1,4 +1,5 @@
-import type { CuentaBancaria, ListaPrecio, PrecioLista, Vehiculo } from '../dominio/tipos'
+import type { CuentaBancaria, ListaPrecio, PrecioLista, Sector, Vehiculo } from '../dominio/tipos'
+import { codigoSector } from './consultas'
 
 export const MAYOREO: Record<string, number> = {
   'prod-gar': 17,
@@ -12,6 +13,25 @@ export function cuentasBancariasIniciales(): CuentaBancaria[] {
   return [
     { id: 'ban-bi', banco: 'Banco Industrial', nombre: 'Monetaria operativa', numero: '001-045892-7', moneda: 'GTQ', cuentaId: '1102', sucursalId: 'suc-z10', activa: true },
     { id: 'ban-gyt', banco: 'Banco G&T Continental', nombre: 'Monetaria Mixco', numero: '012-778310-4', moneda: 'GTQ', cuentaId: '1102', sucursalId: 'suc-mix', activa: true },
+  ]
+}
+
+export function sectoresIniciales(): Sector[] {
+  const armar = (id: string, departamentoCodigo: string, municipioCodigo: string, sector: string, nombre: string, sucursalId: string): Sector => ({
+    id,
+    departamentoCodigo,
+    municipioCodigo,
+    sector,
+    codigo: codigoSector(departamentoCodigo, municipioCodigo, sector),
+    nombre,
+    sucursalId,
+    activo: true,
+  })
+  return [
+    armar('sec-z10-1', '02001', '01', '1', 'Zona 10 sector 1', 'suc-z10'),
+    armar('sec-z10-2', '02001', '02', '2', 'Zona 10 sector 2', 'suc-z10'),
+    armar('sec-mix-1', '02002', '01', '1', 'Mixco sector 1', 'suc-mix'),
+    armar('sec-vn-1', '02003', '01', '1', 'Villa Nueva sector 1', 'suc-vn'),
   ]
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { useErp } from '../datos/store'
 import { registrarCobro, registrarVentaPos } from '../datos/motor'
-import { bancosActivos, saldoBanco, stock } from '../datos/consultas'
+import { bancosActivos, esConsumidorFinal, saldoBanco, stock } from '../datos/consultas'
 import { totalesVenta } from '../dominio/calculos'
 import { quetzales } from '../dominio/formato'
 import type { FormaCobro } from '../dominio/tipos'
@@ -26,10 +26,21 @@ export function Pos() {
   const [recibido, setRecibido] = useState('')
   const [referencia, setReferencia] = useState('')
   const [bancoId, setBancoId] = useState('ban-bi')
+  const [rutaId, setRutaId] = useState('')
+  const [receptorNombre, setReceptorNombre] = useState('')
+  const [sectorId, setSectorId] = useState('')
   const bancos = bancosActivos(estado, permitidas)
   const [ocupado, setOcupado] = useState(false)
 
   const productos = estado.productos.filter((p) => p.activo)
+  const rutaCamion = estado.rutas.find((ruta) => ruta.id === rutaId && ruta.estado === 'en_curso')
+  const productosVisibles = rutaCamion
+    ? productos.filter((producto) => {
+      const extra = rutaCamion.extras?.find((item) => item.productoId === producto.id)
+      return Boolean(extra && extra.cantidad - extra.vendida - extra.devuelta > 0)
+    })
+    : productos
+  const consumidor = esConsumidorFinal(estado.socios.find((s) => s.id === socioId)?.nit ?? '')
   const clientes = estado.socios.filter((s) => s.estado === 'activo' && s.roles.includes('cliente'))
   const sucursal = estado.sucursales.find((s) => s.id === sucursalId)
   const lineas = carrito.map((linea) => {
@@ -72,6 +83,9 @@ export function Pos() {
         sucursalId,
         socioId,
         vendedorId: sesion.id,
+        rutaId: rutaCamion?.id,
+        receptorNombre,
+        sectorId: sectorId || rutaCamion?.sectorId,
         lineas: lineas.map((l) => ({ productoId: l.producto.id, cantidad: l.cantidad, precioUnitario: l.precioUnitario, descuento: 0 })),
       }))
       if (!venta.ok || !venta.id) return
@@ -99,7 +113,7 @@ export function Pos() {
       )}
       <div className="grid items-start gap-4 lg:grid-cols-[1.3fr_0.7fr]">
         <div className="grid gap-3 sm:grid-cols-2">
-          {productos.map((producto) => {
+          {productosVisibles.map((producto) => {
             const existencias = producto.controlaInventario ? stock(estado, sucursalId, producto.id) : null
             return (
               <button key={producto.id} type="button" onClick={() => agregar(producto.id)} className="rounded-md bg-white p-4 text-left shadow-sm ring-1 ring-slate-200 transition hover:ring-cyan-400">
@@ -107,7 +121,7 @@ export function Pos() {
                 <div className="font-display mt-1 text-2xl text-[#083844]">{producto.nombre}</div>
                 <div className="mt-3 flex items-end justify-between">
                   <strong>{quetzales(producto.precio)}</strong>
-                  <span className="text-xs text-slate-500">{existencias === null ? 'Servicio' : `${existencias} en sucursal`}</span>
+                  <span className="text-xs text-slate-500">{rutaCamion ? 'En el camión' : existencias === null ? 'Servicio' : `${existencias} en sucursal`}</span>
                 </div>
               </button>
             )
@@ -115,10 +129,28 @@ export function Pos() {
         </div>
         <aside className="rounded-md bg-white p-4 shadow-sm ring-1 ring-slate-200">
           <Campo etiqueta="Cliente">
-            <Lista value={socioId} onChange={(e) => setSocioId(e.target.value)} className="bg-white text-[#083844]">
+            <Lista value={socioId} onChange={(e) => { setSocioId(e.target.value); setReceptorNombre(''); setSectorId('') }} className="bg-white text-[#083844]">
               {clientes.map((s) => <option key={s.id} value={s.id}>{s.nombreComercial || s.nombre}</option>)}
             </Lista>
           </Campo>
+          <Campo etiqueta="Camión">
+            <Lista value={rutaId} onChange={(e) => { setRutaId(e.target.value); setCarrito([]); if (e.target.value) setForma('efectivo') }}>
+              <option value="">Mostrador, sin camión</option>
+              {estado.rutas.filter((ruta) => ruta.estado === 'en_curso' && ruta.sucursalId === sucursalId).map((ruta) => <option key={ruta.id} value={ruta.id}>{ruta.codigo} · {ruta.vehiculo}</option>)}
+            </Lista>
+          </Campo>
+          {rutaCamion && <p className="mt-2 text-xs text-slate-500">Esta venta sale del extra del camión. En efectivo queda cobrada y contabilizada. Lo que no se venda se reintegra a bodega.</p>}
+          {consumidor && (
+            <div className="mt-3 space-y-3">
+              <Campo etiqueta="A quién se vendió"><Texto value={receptorNombre} onChange={(e) => setReceptorNombre(e.target.value)} placeholder="Nombre de quien compra" /></Campo>
+              <Campo etiqueta="Sector">
+                <Lista value={sectorId || rutaCamion?.sectorId || ''} onChange={(e) => setSectorId(e.target.value)}>
+                  <option value="">Elegí</option>
+                  {(estado.sectores ?? []).filter((sector) => sector.activo && sector.sucursalId === sucursalId).map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
+                </Lista>
+              </Campo>
+            </div>
+          )}
           <ul className="mt-4 space-y-3">
             {lineas.length === 0 && <li className="text-sm text-slate-500">Tocá un producto para armar el ticket.</li>}
             {lineas.map((linea) => (

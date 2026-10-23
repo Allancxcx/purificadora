@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useErp } from '../datos/store'
-import { iniciarRuta, marcarParada, reportarGps } from '../datos/motor'
+import { iniciarRuta, marcarParada, registrarCobro, registrarVentaPos, reportarGps } from '../datos/motor'
 import { posicionRepartidor } from '../datos/consultas'
 import { MapaRutas } from '../componentes/Mapa'
 import { Boton } from '../componentes/ui'
@@ -11,10 +11,15 @@ const MOTIVOS = ['No había nadie', 'Local cerrado', 'Rechazó el pedido', 'Dire
 interface Instalador extends Event { prompt: () => Promise<void> }
 
 export function Reparto() {
-  const { estado, sesion, puede, ejecutar } = useErp()
+  const { estado, sesion, puede, ejecutar, certificar } = useErp()
   const rolPropio = estado.roles.find((r) => r.id === sesion?.rolId)
   const [vista, setVista] = useState(rolPropio?.esRepartidor ? sesion?.id ?? '' : 'usr-juan')
   const [problema, setProblema] = useState(false)
+  const [extraId, setExtraId] = useState('')
+  const [cantidadExtra, setCantidadExtra] = useState(1)
+  const [efectivo, setEfectivo] = useState(true)
+  const [receptor, setReceptor] = useState('')
+  const [vendiendo, setVendiendo] = useState(false)
   const [instalador, setInstalador] = useState<Instalador | null>(null)
   const [ayuda, setAyuda] = useState(false)
   const [gps, setGps] = useState<'apagado' | 'activo' | 'denegado' | 'sin'>('apagado')
@@ -138,6 +143,47 @@ export function Reparto() {
                       {MOTIVOS.map((motivo) => <Boton key={motivo} variante="secundario" onClick={() => { ejecutar((e) => marcarParada(e, ruta.id, parada.id, 'incidencia', motivo)); setProblema(false) }}>{motivo}</Boton>)}
                     </div>
                   )}
+                </article>
+              )}
+              {ruta.estado === 'en_curso' && (ruta.extras ?? []).some((extra) => extra.cantidad - extra.vendida - extra.devuelta > 0) && (
+                <article className="rounded-md bg-white p-4 text-sm">
+                  <h2 className="font-medium text-[#083844]">Venta extra</h2>
+                  <p className="mt-1 text-xs text-slate-500">Si el cliente pide más, se vende del extra del camión. El efectivo queda cobrado al certificar.</p>
+                  <select className="mt-2 w-full rounded border border-slate-200 px-2 py-2" value={extraId} onChange={(e) => setExtraId(e.target.value)}>
+                    <option value="">Producto</option>
+                    {(ruta.extras ?? []).filter((extra) => extra.cantidad - extra.vendida - extra.devuelta > 0).map((extra) => {
+                      const producto = estado.productos.find((p) => p.id === extra.productoId)
+                      return <option key={extra.productoId} value={extra.productoId}>{producto?.nombre} · quedan {extra.cantidad - extra.vendida - extra.devuelta}</option>
+                    })}
+                  </select>
+                  <input className="mt-2 w-full rounded border border-slate-200 px-2 py-2" type="number" min={1} value={cantidadExtra} onChange={(e) => setCantidadExtra(Number(e.target.value))} />
+                  <input className="mt-2 w-full rounded border border-slate-200 px-2 py-2" placeholder="A quién se vendió" value={receptor} onChange={(e) => setReceptor(e.target.value)} />
+                  <label className="mt-2 flex items-center gap-2"><input type="checkbox" checked={efectivo} onChange={(e) => setEfectivo(e.target.checked)} /> Efectivo</label>
+                  <Boton className="mt-2 w-full" disabled={vendiendo || !extraId} onClick={async () => {
+                    if (!sesion || !extraId) return
+                    const producto = estado.productos.find((p) => p.id === extraId)
+                    if (!producto) return
+                    setVendiendo(true)
+                    try {
+                      const venta = ejecutar((actual) => registrarVentaPos(actual, {
+                        sucursalId: ruta.sucursalId,
+                        socioId: 'soc-cf',
+                        vendedorId: sesion.id,
+                        rutaId: ruta.id,
+                        receptorNombre: receptor || parada?.nombre || 'Cliente de ruta',
+                        sectorId: ruta.sectorId,
+                        lineas: [{ productoId: producto.id, cantidad: cantidadExtra, precioUnitario: producto.precio, descuento: 0 }],
+                      }))
+                      if (!venta.ok || !venta.id) return
+                      const certificada = await certificar(venta.id)
+                      if (certificada && efectivo) ejecutar((actual) => registrarCobro(actual, venta.id!, producto.precio * cantidadExtra, 'efectivo', 'Efectivo en ruta'))
+                      setExtraId('')
+                      setReceptor('')
+                      setCantidadExtra(1)
+                    } finally {
+                      setVendiendo(false)
+                    }
+                  }}>{vendiendo ? 'Vendiendo…' : 'Vender del camión'}</Boton>
                 </article>
               )}
               <ol className="space-y-2 text-sm">

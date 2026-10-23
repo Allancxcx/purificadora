@@ -17,9 +17,9 @@ export interface Aviso {
 }
 
 const COMPLEMENTO_ROL: Record<string, string[]> = {
-  'rol-ventas': ['pos.operar', 'facturas.cobrar', 'precios.ver', 'bancos.ver'],
-  'rol-gerente': ['pos.operar', 'facturas.emitir', 'facturas.cobrar', 'precios.ver', 'precios.editar', 'activos.ver', 'bancos.ver'],
-  'rol-conta': ['empresa.ver', 'activos.ver', 'activos.editar', 'precios.ver', 'bancos.ver', 'bancos.editar'],
+  'rol-ventas': ['pos.operar', 'facturas.cobrar', 'precios.ver', 'bancos.ver', 'analisis.ver'],
+  'rol-gerente': ['pos.operar', 'facturas.emitir', 'facturas.cobrar', 'precios.ver', 'precios.editar', 'activos.ver', 'bancos.ver', 'analisis.ver'],
+  'rol-conta': ['empresa.ver', 'activos.ver', 'activos.editar', 'precios.ver', 'bancos.ver', 'bancos.editar', 'analisis.ver'],
   'rol-bodega': ['activos.ver', 'bancos.ver'],
 }
 

@@ -84,7 +84,7 @@ export function armarDte(estado: Estado, facturaId: string): DteArmado {
       },
       receptor: {
         id: idReceptor,
-        nombre: socio.nombre,
+        nombre: factura.receptorNombre || socio.nombre,
         correo: socio.correo,
         tipoEspecial: /^\d{13}$/.test(idReceptor) ? 'CUI' : undefined,
         direccion: {

@@ -1,4 +1,5 @@
 import { CTA, redondear, totalesCompra, totalesVenta } from '../dominio/calculos'
+import { nitLimpio } from '../dominio/formato'
 import { distanciaKm, interpolar, type Punto } from '../dominio/geo'
 import type { Estado, Factura, OrdenVenta, Ruta, SerieDocumento, TipoSerie, Usuario } from '../dominio/tipos'
 
@@ -13,6 +14,18 @@ export function listaDelSocio(estado: Estado, socioId: string): string {
   const asignada = estado.listasPrecio.find((l) => l.id === socio?.listaPrecioId && l.activa)
   if (asignada) return asignada.id
   return estado.listasPrecio.find((l) => l.esBase && l.activa)?.id ?? estado.listasPrecio.find((l) => l.activa)?.id ?? ''
+}
+
+export function codigoSector(departamentoCodigo: string, municipioCodigo: string, sector: string): string {
+  const departamento = departamentoCodigo.trim()
+  const municipio = municipioCodigo.trim()
+  const numero = sector.trim()
+  if (numero.length === 1 && municipio.endsWith(numero)) return `${departamento}${municipio}`
+  return `${departamento}${municipio}${numero}`
+}
+
+export function esConsumidorFinal(nit: string): boolean {
+  return nitLimpio(nit) === 'CF'
 }
 
 export function sucursalesDe(usuario: Pick<Usuario, 'sucursalId'> & { sucursalesIds?: string[] }): string[] {

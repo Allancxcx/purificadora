@@ -20,6 +20,8 @@ import { Reparto } from './paginas/Reparto'
 import { Activos } from './paginas/Activos'
 import { Bancos } from './paginas/Bancos'
 import { Precios } from './paginas/Precios'
+import { Sectores } from './paginas/Sectores'
+import { Analisis } from './paginas/Analisis'
 
 function Guard({ codigo, children }: { codigo: string; children: React.ReactNode }) {
   const { puede } = useErp()
@@ -60,12 +62,14 @@ export default function App() {
           <Route path="pos" element={<Guard codigo="pos.operar"><Pos /></Guard>} />
           <Route path="compras" element={<Guard codigo="compras.ver"><Compras /></Guard>} />
           <Route path="facturas" element={<Guard codigo="facturas.ver"><Facturas /></Guard>} />
+          <Route path="analisis" element={<Guard codigo="analisis.ver"><Analisis /></Guard>} />
           <Route path="inventario" element={<Guard codigo="inventario.ver"><Inventario /></Guard>} />
           <Route path="contabilidad" element={<Guard codigo="contabilidad.ver"><Contabilidad /></Guard>} />
           <Route path="bancos" element={<Guard codigo="bancos.ver"><Bancos /></Guard>} />
           <Route path="activos" element={<Guard codigo="activos.ver"><Activos /></Guard>} />
           <Route path="rutas" element={<Guard codigo="rutas.ver"><Rutas /></Guard>} />
           <Route path="sucursales" element={<Guard codigo="sucursales.ver"><Sucursales /></Guard>} />
+          <Route path="sectores" element={<Guard codigo="sucursales.ver"><Sectores /></Guard>} />
           <Route path="series" element={<Guard codigo="series.ver"><Series /></Guard>} />
           <Route path="fel" element={<Guard codigo="fel.ver"><Fel /></Guard>} />
           <Route path="seguridad" element={<Guard codigo="seguridad.ver"><Seguridad /></Guard>} />

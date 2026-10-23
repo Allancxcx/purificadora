@@ -1,4 +1,4 @@
-import { useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { isValidElement, useState, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 
 export function cx(...partes: (string | false | undefined | null)[]) {
@@ -98,6 +98,25 @@ function leerPref(clave: string, columnas: ColumnaGrilla[]): PrefGrilla {
   }
 }
 
+function textoNodo(nodo: ReactNode): string {
+  if (nodo == null || typeof nodo === 'boolean') return ''
+  if (typeof nodo === 'string' || typeof nodo === 'number') return String(nodo)
+  if (Array.isArray(nodo)) return nodo.map(textoNodo).filter(Boolean).join(' ')
+  if (isValidElement(nodo)) return textoNodo((nodo.props as { children?: ReactNode }).children)
+  return ''
+}
+
+function descargarCsv(nombre: string, encabezados: string[], filas: string[][]) {
+  const celda = (valor: string) => `"${valor.replaceAll('"', '""')}"`
+  const cuerpo = [encabezados.map(celda).join(','), ...filas.map((fila) => fila.map(celda).join(','))].join('\n')
+  const url = URL.createObjectURL(new Blob([`\uFEFF${cuerpo}`], { type: 'text/csv;charset=utf-8' }))
+  const enlace = document.createElement('a')
+  enlace.href = url
+  enlace.download = nombre
+  enlace.click()
+  URL.revokeObjectURL(url)
+}
+
 export function Tabla({ id, columnas, filas, vacio }: {
   id?: string
   columnas: Array<string | ColumnaGrilla>
@@ -147,6 +166,10 @@ export function Tabla({ id, columnas, filas, vacio }: {
     <div className="overflow-hidden rounded-md border border-[#d5dde2] bg-white">
       <div className="flex flex-wrap items-center gap-2 border-b border-[#e6ebef] bg-[#f7f9fa] px-3 py-2">
         <Boton variante="secundario" onClick={() => setColumnasAbiertas((v) => !v)}>{columnasAbiertas ? 'Cerrar columnas' : 'Columnas'}</Boton>
+        <Boton variante="secundario" onClick={() => {
+          const exportables = visibles.filter((columna) => columna.titulo && columna.titulo !== 'Acciones')
+          descargarCsv(`${id || 'manantial'}.csv`, exportables.map((columna) => columna.titulo), filas.map((fila) => exportables.map((columna) => textoNodo(fila.celdas[base.findIndex((item) => item.id === columna.id)]))))
+        }}>Descargar</Boton>
         <span className="text-xs text-[#5c6770]">{filas.length} registros</span>
         <label className="ml-auto flex items-center gap-2 text-xs text-[#5c6770]">
           Por página

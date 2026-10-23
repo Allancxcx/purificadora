@@ -4,6 +4,7 @@ import { anularOrdenCompra, crearOrdenCompra, pagarProveedor, recibirOrdenCompra
 import { bancosActivos, folio, saldoBanco, saldoCompra } from '../datos/consultas'
 import { totalesCompra } from '../dominio/calculos'
 import { formatoFecha, quetzales } from '../dominio/formato'
+import type { FormaCobro } from '../dominio/tipos'
 import { Badge, Boton, Campo, Lista, Modal, Pagina, Tabla, Texto } from '../componentes/ui'
 
 export function Compras() {
@@ -18,6 +19,8 @@ export function Compras() {
   const [pago, setPago] = useState<string | null>(null)
   const [monto, setMonto] = useState(0)
   const [bancoId, setBancoId] = useState('ban-bi')
+  const [forma, setForma] = useState<FormaCobro>('transferencia')
+  const [facturaProveedor, setFacturaProveedor] = useState('')
   const [referencia, setReferencia] = useState('')
   const general = sucursalActiva === 'todas'
   const bancos = bancosActivos(estado, permitidas)
@@ -32,7 +35,7 @@ export function Compras() {
   return (
     <Pagina titulo="Órdenes de compra" detalle="El costo va sin IVA. Al recibir queda la cuenta por pagar. Pagala desde la cuenta bancaria que elijas. La factura del proveedor no se ajusta con una nota de débito: ese documento solo se emite a un cliente." accion={puede('compras.editar') && <Boton onClick={() => setAbierto(true)}>Nueva compra</Boton>}>
       <Tabla
-        columnas={['Documento', 'Fecha', ...(general ? ['Sucursal'] : []), 'Proveedor', 'Estado', 'Total', 'Saldo', '']}
+        columnas={['Documento', 'Fecha', ...(general ? ['Sucursal'] : []), 'Proveedor', 'Factura proveedor', 'Estado', 'Total', 'Saldo', '']}
         vacio="No hay compras en esta sucursal."
         filas={ordenes.map((orden) => {
           const serie = estado.series.find((s) => s.id === orden.serieId)
@@ -43,6 +46,7 @@ export function Compras() {
               formatoFecha(orden.fecha),
               ...(general ? [estado.sucursales.find((s) => s.id === orden.sucursalId)?.codigo ?? ''] : []),
               estado.socios.find((s) => s.id === orden.socioId)?.nombre,
+              orden.facturaProveedor ?? '',
               <Badge key="e" tono={orden.estado === 'recibida' ? 'ok' : orden.estado === 'anulada' ? 'peligro' : 'alerta'}>{orden.estado}</Badge>,
               quetzales(totalesCompra(orden.lineas).total),
               orden.estado === 'recibida' ? quetzales(saldoCompra(estado, orden.id)) : '',
@@ -52,7 +56,7 @@ export function Compras() {
                   <Boton variante="peligro" onClick={() => ejecutar((e) => anularOrdenCompra(e, orden.id))}>Anular</Boton>
                 </span>
               ) : puede('compras.editar') && orden.estado === 'recibida' && saldoCompra(estado, orden.id) > 0 ? (
-                <Boton key="p" onClick={() => { setPago(orden.id); setMonto(saldoCompra(estado, orden.id)); setReferencia(''); setBancoId(bancos[0]?.id ?? '') }}>Pagar</Boton>
+                <Boton key="p" onClick={() => { setPago(orden.id); setMonto(saldoCompra(estado, orden.id)); setReferencia(''); setForma('transferencia'); setFacturaProveedor(orden.facturaProveedor ?? ''); setBancoId(bancos[0]?.id ?? '') }}>Pagar</Boton>
               ) : <span key="v" className="text-xs text-slate-400">{orden.estado === 'recibida' ? 'Pagada' : orden.notas}</span>,
             ],
           }
@@ -91,16 +95,26 @@ export function Compras() {
         <form className="space-y-3" onSubmit={(e) => {
           e.preventDefault()
           if (!pago) return
-          const resultado = ejecutar((actual) => pagarProveedor(actual, pago, monto, bancoId, referencia))
+          const resultado = ejecutar((actual) => pagarProveedor(actual, pago, monto, forma, forma === 'efectivo' ? '' : bancoId, referencia, undefined, facturaProveedor))
           if (resultado.ok) setPago(null)
         }}>
-          <Campo etiqueta="Cuenta bancaria">
-            <Lista value={bancoId} onChange={(e) => setBancoId(e.target.value)}>
-              {bancos.map((b) => <option key={b.id} value={b.id}>{b.nombre} · {quetzales(saldoBanco(estado, b.id))}</option>)}
+          <Campo etiqueta="Forma">
+            <Lista value={forma} onChange={(e) => setForma(e.target.value as FormaCobro)}>
+              <option value="efectivo">Efectivo</option>
+              <option value="tarjeta">Tarjeta</option>
+              <option value="transferencia">Transferencia</option>
             </Lista>
           </Campo>
+          {forma !== 'efectivo' && (
+            <Campo etiqueta="Cuenta bancaria">
+              <Lista value={bancoId} onChange={(e) => setBancoId(e.target.value)}>
+                {bancos.map((b) => <option key={b.id} value={b.id}>{b.nombre} · {quetzales(saldoBanco(estado, b.id))}</option>)}
+              </Lista>
+            </Campo>
+          )}
+          <Campo etiqueta="Factura del proveedor"><Texto value={facturaProveedor} onChange={(e) => setFacturaProveedor(e.target.value)} placeholder="Número de factura" /></Campo>
           <Campo etiqueta="Monto"><Texto type="number" step="0.01" value={monto} onChange={(e) => setMonto(Number(e.target.value))} /></Campo>
-          <Campo etiqueta="Referencia"><Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder="Número de transferencia" /></Campo>
+          <Campo etiqueta={forma === 'tarjeta' ? 'Autorización' : forma === 'efectivo' ? 'Recibo' : 'Número de transferencia'}><Texto value={referencia} onChange={(e) => setReferencia(e.target.value)} placeholder={forma === 'transferencia' ? 'Número de transferencia' : ''} /></Campo>
           <Boton type="submit">Registrar pago</Boton>
         </form>
       </Modal>

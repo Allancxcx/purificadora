@@ -64,12 +64,12 @@ export function Facturas() {
         vacio="No hay facturas en esta sucursal. Facturá una orden de venta."
         filas={facturas.map((factura) => {
           const serie = estado.series.find((s) => s.id === factura.serieId)
-          const numero = factura.numero ? folio(serie?.prefijo ?? 'FAC', factura.numero) : 'Sin número'
+          const numero = factura.interna ? folio('CI', factura.numero ?? 0) : factura.numero ? folio(serie?.prefijo ?? 'FAC', factura.numero) : 'Sin número'
           const cliente = estado.socios.find((s) => s.id === factura.socioId)
           const tieneNota = estado.facturas.some((f) => f.facturaOrigenId === factura.id && f.estado !== 'cancelada')
           const notaCreditoPendiente = estado.facturas.some((f) => f.facturaOrigenId === factura.id && f.tipo === 'NCRE' && f.estado !== 'cancelada')
           const facturaDeCliente = factura.tipo === 'FACT' && Boolean(factura.ordenVentaId) && Boolean(cliente?.roles.includes('cliente'))
-          const puedeAjustar = puede('facturas.emitir') && facturaDeCliente && factura.estado === 'cerrada' && !factura.ajustada && !tieneNota
+          const puedeAjustar = puede('facturas.emitir') && facturaDeCliente && factura.estado === 'cerrada' && !factura.ajustada && !factura.interna && !tieneNota
           const sinCobros = factura.cobros.length === 0
           return {
             id: factura.id,
@@ -77,16 +77,16 @@ export function Facturas() {
               numero,
               ...(general ? [estado.sucursales.find((s) => s.id === factura.sucursalId)?.codigo ?? ''] : []),
               TIPO[factura.tipo],
-              estado.socios.find((s) => s.id === factura.socioId)?.nombre,
+              factura.receptorNombre || estado.socios.find((s) => s.id === factura.socioId)?.nombre,
               <span key="e">
-                <Badge tono={factura.estado === 'cerrada' ? 'ok' : factura.estado === 'cancelada' ? 'peligro' : 'alerta'}>{factura.ajustada ? 'Ajustada' : ETIQUETA[factura.estado]}</Badge>
+                <Badge tono={factura.interna ? 'neutro' : factura.estado === 'cerrada' ? 'ok' : factura.estado === 'cancelada' ? 'peligro' : 'alerta'}>{factura.interna ? 'Interna' : factura.ajustada ? 'Ajustada' : ETIQUETA[factura.estado]}</Badge>
                 {factura.ultimoError && <div className="mt-1 max-w-xs text-xs text-rose-700">{factura.ultimoError}</div>}
               </span>,
               quetzales(totalesVenta(factura.lineas).total),
               quetzales(saldoFactura(factura)),
               <span key="a" className="flex flex-wrap gap-1">
                 <Boton variante="secundario" onClick={() => setVista(factura.id)}>Ver</Boton>
-                <Boton variante="secundario" onClick={() => descargar(factura.id)}>XML</Boton>
+                {!factura.interna && <Boton variante="secundario" onClick={() => descargar(factura.id)}>XML</Boton>}
                 {puede('facturas.emitir') && factura.estado === 'abierta' && <Boton disabled={certificando === factura.id} onClick={() => certificar(factura.id)}>{certificando === factura.id ? 'Certificando…' : 'Certificar'}</Boton>}
                 {puede('facturas.cobrar') && saldoFactura(factura) > 0 && !notaCreditoPendiente && <Boton variante="secundario" onClick={() => { setCobro(factura.id); setMonto(saldoFactura(factura)); setReferencia(''); setBancoId(bancos[0]?.id ?? '') }}>Cobrar</Boton>}
                 {puedeAjustar && sinCobros && <Boton variante="secundario" onClick={() => pedir(factura.id, 'anular')}>Anular</Boton>}

@@ -15,14 +15,15 @@ import type {
   Producto,
   Rol,
   SerieDocumento,
+  Sector,
   Socio,
   Sucursal,
   TipoSerie,
   Usuario,
   Vehiculo,
 } from '../dominio/tipos'
-import { cuentasBancariasIniciales, flotaInicial, listasIniciales } from './catalogos'
-import { facturaVigente, saldoBanco, saldoCuenta, serieActiva, stock } from './consultas'
+import { cuentasBancariasIniciales, flotaInicial, listasIniciales, sectoresIniciales } from './catalogos'
+import { codigoSector, esConsumidorFinal, facturaVigente, saldoBanco, saldoCuenta, serieActiva, stock } from './consultas'
 
 export type Resultado =
   | { ok: true; estado: Estado; id?: string; aviso?: string }
@@ -197,7 +198,10 @@ export function guardarSocio(entrada: Estado, input: Omit<Socio, 'id' | 'codigo'
   if (repetido) return { ok: false, error: 'Ya existe un socio con ese NIT.' }
   const listaPrecioId = input.listaPrecioId || undefined
   if (listaPrecioId && !estado.listasPrecio.some((l) => l.id === listaPrecioId)) return { ok: false, error: 'Esa lista de precios no existe.' }
-  const socioInput = { ...input, listaPrecioId }
+  const sector = input.sectorId ? estado.sectores?.find((item) => item.id === input.sectorId && item.activo) : undefined
+  if (input.sectorId && !sector) return { ok: false, error: 'Ese sector no está activo.' }
+  if (sector && sector.sucursalId !== input.sucursalId) return { ok: false, error: 'La sucursal del socio tiene que ser la del sector.' }
+  const socioInput = { ...input, listaPrecioId, sectorId: sector?.id }
   if (input.id) {
     const actual = estado.socios.find((s) => s.id === input.id)
     if (!actual) return { ok: false, error: 'No encontré el socio.' }
@@ -346,6 +350,9 @@ export interface NuevaVenta {
   notas: string
   fecha?: string
   confirmar: boolean
+  facturar?: boolean
+  receptorNombre?: string
+  sectorId?: string
   listaPrecioId?: string
   lineas: { productoId: string; cantidad: number; precioUnitario: number; descuento: number }[]
 }
@@ -385,6 +392,14 @@ export function crearOrdenVenta(entrada: Estado, input: NuevaVenta): Resultado {
   if ('error' in serie) return { ok: false, error: serie.error }
   const lineas = construirLineas(estado, input.lineas)
   if ('error' in lineas) return { ok: false, error: lineas.error }
+  const sectorId = input.sectorId || socio.sectorId
+  const sector = sectorId ? estado.sectores?.find((item) => item.id === sectorId && item.activo) : undefined
+  if (sectorId && !sector) return { ok: false, error: 'Ese sector no está activo.' }
+  if (sector && sector.sucursalId !== input.sucursalId) return { ok: false, error: 'El sector pertenece a otra sucursal.' }
+  const ocasional = esConsumidorFinal(socio.nit)
+  const receptorNombre = input.receptorNombre?.trim() ?? ''
+  if (ocasional && input.facturar !== false && receptorNombre.length < 3) return { ok: false, error: 'En consumidor final indicá a quién se le vendió.' }
+  if (ocasional && input.facturar !== false && !sector) return { ok: false, error: 'En consumidor final elegí el sector.' }
   const numero = tomarNumero(estado, serie.id)
   if ('error' in numero) return { ok: false, error: numero.error }
   const orden: OrdenVenta = {
@@ -402,6 +417,9 @@ export function crearOrdenVenta(entrada: Estado, input: NuevaVenta): Resultado {
     ventana: input.ventana || '08:00–12:00',
     notas: input.notas,
     listaPrecioId: estado.listasPrecio.some((l) => l.id === input.listaPrecioId) ? input.listaPrecioId : undefined,
+    facturar: input.facturar !== false,
+    receptorNombre: receptorNombre || undefined,
+    sectorId: sector?.id,
     lineas,
     origenInventario: null,
   }
@@ -537,7 +555,12 @@ export function emitirFactura(entrada: Estado, ordenId: string, fecha?: string):
   if (!orden || orden.estado === 'anulada' || orden.estado === 'borrador') {
     return { ok: false, error: 'Confirmá la orden antes de facturar.' }
   }
+  if (orden.facturar === false) return { ok: false, error: 'Esta orden está marcada para no enviarse a facturar.' }
   if (facturaVigente(estado, ordenId)) return { ok: false, error: 'Esa orden ya tiene una factura vigente.' }
+  const cliente = estado.socios.find((s) => s.id === orden.socioId)
+  if (cliente && esConsumidorFinal(cliente.nit) && (!orden.receptorNombre || !orden.sectorId)) {
+    return { ok: false, error: 'En consumidor final hacen falta el nombre de quien compró y el sector.' }
+  }
   const serie = exigirSerie(estado, orden.sucursalId, 'FACTURA')
   if ('error' in serie) return { ok: false, error: serie.error }
   const totales = totalesVenta(orden.lineas)
@@ -559,9 +582,86 @@ export function emitirFactura(entrada: Estado, ordenId: string, fecha?: string):
     cobros: [],
     movioInventario: false,
     ajustada: false,
+    receptorNombre: orden.receptorNombre,
+    sectorId: orden.sectorId ?? cliente?.sectorId,
   }
   estado.facturas.unshift(factura)
   return { ok: true, estado, id: factura.id, aviso: 'Factura abierta. Todavía no consume correlativo.' }
+}
+
+export function cerrarVentaInterna(entrada: Estado, ordenId: string, fecha?: string): Resultado {
+  const estado = clonar(entrada)
+  const orden = estado.ordenesVenta.find((o) => o.id === ordenId)
+  if (!orden || orden.estado === 'anulada' || orden.estado === 'borrador') {
+    return { ok: false, error: 'Confirmá la orden antes de cerrarla.' }
+  }
+  if (orden.facturar !== false) return { ok: false, error: 'Esta orden sí se envía a facturar.' }
+  if (facturaVigente(estado, ordenId)) return { ok: false, error: 'Esa orden ya tiene un documento vigente.' }
+  const totales = totalesVenta(orden.lineas)
+  if (totales.total <= 0) return { ok: false, error: 'La venta no tiene importe.' }
+  const dia = fecha ?? fechaGT()
+  let costo = 0
+  const porFacturar = !orden.origenInventario
+    ? orden.lineas.map((linea) => ({ ...linea, cantidad: Math.max(0, pendienteDe(linea)) })).filter((linea) => linea.cantidad > 0.001)
+    : []
+  if (porFacturar.length > 0) {
+    const falta = faltaStock(estado, orden.sucursalId, porFacturar)
+    if (falta) return { ok: false, error: falta }
+  }
+  estado.siguienteInterno = estado.siguienteInterno ?? 1
+  const numero = estado.siguienteInterno
+  estado.siguienteInterno += 1
+  const referencia = folio('CI', numero)
+  if (porFacturar.length > 0) {
+    const yaDespachada = orden.lineas.some((linea) => (linea.despachada ?? 0) > 0.001)
+    moverCarga(estado, orden, porFacturar.map((linea) => ({ linea: orden.lineas.find((l) => l.id === linea.id) ?? linea, cantidad: linea.cantidad })), 'salida', referencia, 'Salida por venta interna', dia)
+    if (!yaDespachada) orden.origenInventario = 'factura'
+    for (const linea of orden.lineas) {
+      if (pendienteDe(linea) > 0.001) linea.despachada = linea.cantidad
+    }
+    costo = costoCarga(porFacturar.map((linea) => ({ linea, cantidad: linea.cantidad })))
+  }
+  const socio = estado.socios.find((s) => s.id === orden.socioId)
+  const detalle = orden.receptorNombre || socio?.nombre || 'Cliente'
+  const lineas = lineasIngreso(totales.total, totales.iva, detalle, 1)
+  if (costo > 0) {
+    lineas.push({ cuentaId: CTA.costo, detalle: 'Costo de ventas', debe: costo, haber: 0 })
+    lineas.push({ cuentaId: CTA.inventario, detalle: 'Salida de inventario', debe: 0, haber: costo })
+  }
+  const asiento = registrarAsiento(estado, {
+    fecha: dia,
+    descripcion: `Venta interna ${referencia}`,
+    origen: 'factura',
+    sucursalId: orden.sucursalId,
+    lineas,
+  })
+  if ('error' in asiento) return { ok: false, error: asiento.error }
+  const serie = estado.series.find((item) => item.sucursalId === orden.sucursalId && item.tipo === 'FACTURA')
+  const factura: Estado['facturas'][number] = {
+    id: nid('fac'),
+    tipo: 'FACT',
+    sucursalId: orden.sucursalId,
+    socioId: orden.socioId,
+    ordenVentaId: orden.id,
+    serieId: serie?.id ?? orden.serieId,
+    numero,
+    fecha: dia,
+    estado: 'cerrada',
+    lineas: structuredClone(orden.lineas),
+    motivo: 'Venta sin certificación FEL',
+    acuse: null,
+    dte: null,
+    cobros: [],
+    asientoId: asiento.id,
+    movioInventario: porFacturar.some((linea) => linea.controlaInventario),
+    ajustada: false,
+    interna: true,
+    receptorNombre: orden.receptorNombre,
+    sectorId: orden.sectorId ?? socio?.sectorId,
+  }
+  estado.facturas.unshift(factura)
+  if (orden.estado === 'confirmada') orden.estado = 'entregada'
+  return { ok: true, estado, id: factura.id, aviso: `Venta interna ${referencia} cerrada, sin certificador` }
 }
 
 function notaVigente(estado: Estado, facturaId: string) {
@@ -571,6 +671,7 @@ function notaVigente(estado: Estado, facturaId: string) {
 export function emitirNota(entrada: Estado, facturaId: string, tipo: 'NCRE' | 'NDEB', motivo: string): Resultado {
   const estado = clonar(entrada)
   const origen = estado.facturas.find((f) => f.id === facturaId)
+  if (origen?.interna) return { ok: false, error: 'La venta interna no pasa por el certificador. No se le emite nota.' }
   if (!origen || origen.tipo !== 'FACT' || origen.estado !== 'cerrada') {
     return { ok: false, error: 'La nota sale de una factura de venta cerrada.' }
   }
@@ -814,7 +915,7 @@ export function registrarCobro(entrada: Estado, facturaId: string, monto: number
   return { ok: true, estado, aviso: `Recibo ${folio(serie.prefijo, numero.numero)} registrado` }
 }
 
-export function pagarProveedor(entrada: Estado, ordenId: string, monto: number, bancoId: string, referencia: string, fecha?: string): Resultado {
+export function pagarProveedor(entrada: Estado, ordenId: string, monto: number, forma: FormaCobro, bancoId: string, referencia: string, fecha?: string, facturaProveedor?: string): Resultado {
   const estado = clonar(entrada)
   const orden = estado.ordenesCompra.find((item) => item.id === ordenId)
   if (!orden || orden.estado !== 'recibida') return { ok: false, error: 'Solo se paga una compra ya recibida.' }
@@ -822,10 +923,15 @@ export function pagarProveedor(entrada: Estado, ordenId: string, monto: number, 
   const saldo = redondear(totalesCompra(orden.lineas).total - pagado)
   const importe = redondear(monto)
   if (importe <= 0 || importe - saldo > 0.001) return { ok: false, error: `El pago no puede pasar el saldo de Q${saldo.toFixed(2)}.` }
-  if (referencia.trim().length < 3) return { ok: false, error: 'Indicá la referencia de la transferencia.' }
-  const banco = estado.cuentasBancarias?.find((item) => item.id === bancoId && item.activa)
-  if (!banco) return { ok: false, error: 'Elegí la cuenta bancaria del pago.' }
+  const boleta = referencia.trim()
+  if (forma !== 'efectivo' && boleta.length < 3) return { ok: false, error: forma === 'tarjeta' ? 'Indicá la autorización de la tarjeta.' : 'Indicá el número de transferencia.' }
+  const banco = forma === 'efectivo' ? undefined : estado.cuentasBancarias?.find((item) => item.id === bancoId && item.activa)
+  if (forma !== 'efectivo' && !banco) return { ok: false, error: 'Elegí la cuenta bancaria del pago.' }
+  const documento = facturaProveedor?.trim() ?? ''
+  if (documento && documento.length < 3) return { ok: false, error: 'El número de factura del proveedor es muy corto.' }
+  if (documento) orden.facturaProveedor = documento
   const serie = estado.series.find((item) => item.id === orden.serieId)
+  const detalle = boleta || 'Efectivo'
   const asiento = registrarAsiento(estado, {
     fecha: fecha || fechaGT(),
     descripcion: `Pago ${folio(serie?.prefijo ?? 'OC', orden.numero)}`,
@@ -833,8 +939,8 @@ export function pagarProveedor(entrada: Estado, ordenId: string, monto: number, 
     origenId: orden.id,
     sucursalId: orden.sucursalId,
     lineas: [
-      { cuentaId: CTA.proveedores, detalle: referencia.trim(), debe: importe, haber: 0 },
-      { cuentaId: CTA.bancos, detalle: `${banco.nombre} · ${referencia.trim()}`, debe: 0, haber: importe, bancoId: banco.id },
+      { cuentaId: CTA.proveedores, detalle: orden.facturaProveedor ? `${detalle} · factura ${orden.facturaProveedor}` : detalle, debe: importe, haber: 0 },
+      { cuentaId: forma === 'efectivo' ? CTA.caja : CTA.bancos, detalle: banco ? `${forma} · ${banco.nombre}` : 'Efectivo', debe: 0, haber: importe, bancoId: banco?.id },
     ],
   })
   if ('error' in asiento) return { ok: false, error: asiento.error }
@@ -845,9 +951,11 @@ export function pagarProveedor(entrada: Estado, ordenId: string, monto: number, 
     sucursalId: orden.sucursalId,
     socioId: orden.socioId,
     ordenCompraId: orden.id,
-    bancoId: banco.id,
+    forma,
+    bancoId: banco?.id,
     monto: importe,
-    referencia: referencia.trim(),
+    referencia: detalle,
+    facturaProveedor: orden.facturaProveedor,
     asientoId: asiento.id,
   })
   return { ok: true, estado, aviso: saldo - importe < 0.01 ? 'Compra pagada' : 'Pago registrado. Queda saldo con el proveedor.' }
@@ -881,11 +989,13 @@ export function guardarCuentaBancaria(entrada: Estado, input: { id?: string; ban
 
 export interface NuevaRuta {
   sucursalId: string
+  sectorId?: string
   repartidorId: string
   vehiculoId?: string
   vehiculo?: string
   ordenIds: string[]
   cargas?: { ordenId: string; lineas: { lineaId: string; cantidad: number }[] }[]
+  extras?: { productoId: string; cantidad: number }[]
   fecha?: string
 }
 
@@ -905,12 +1015,24 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
   if (estado.vehiculos.length > 0 && !vehiculo) return { ok: false, error: 'Elegí un vehículo del catálogo de activos.' }
   if (vehiculo && vehiculo.sucursalId !== input.sucursalId) return { ok: false, error: 'Ese vehículo pertenece a otra sucursal.' }
   if (vehiculo && vehiculo.estado !== 'disponible') return { ok: false, error: 'Ese vehículo no está disponible.' }
+  const sector = input.sectorId ? estado.sectores?.find((item) => item.id === input.sectorId && item.activo) : undefined
+  if (!sector || sector.sucursalId !== input.sucursalId) return { ok: false, error: 'Elegí el sector de esta sucursal.' }
+  const extras = []
+  for (const extra of input.extras ?? []) {
+    const producto = estado.productos.find((p) => p.id === extra.productoId && p.activo && p.controlaInventario)
+    if (!producto) return { ok: false, error: 'El extra del camión tiene que ser un producto de inventario.' }
+    if (extra.cantidad <= 0) continue
+    extras.push({ productoId: producto.id, cantidad: extra.cantidad, vendida: 0, devuelta: 0, costoUnitario: producto.costo })
+  }
   const paradas = []
   for (const ordenId of input.ordenIds) {
     const orden = estado.ordenesVenta.find((o) => o.id === ordenId)
     if (!orden || orden.sucursalId !== input.sucursalId || orden.estado !== 'confirmada') {
       return { ok: false, error: 'Todas las órdenes tienen que estar confirmadas y ser de la misma sucursal.' }
     }
+    const socioSector = estado.socios.find((s) => s.id === orden.socioId)
+    const sectorOrden = orden.sectorId || socioSector?.sectorId
+    if (sectorOrden && sectorOrden !== sector.id) return { ok: false, error: 'La orden es de otro sector.' }
     if (facturaVigente(estado, orden.id) && orden.origenInventario === 'factura') {
       return { ok: false, error: 'Una orden ya facturada en mostrador no se sube al camión.' }
     }
@@ -956,11 +1078,13 @@ export function crearRuta(entrada: Estado, input: NuevaRuta): Resultado {
     codigo,
     fecha: input.fecha ?? fechaGT(),
     sucursalId: input.sucursalId,
+    sectorId: sector.id,
     repartidorId: repartidor.id,
     vehiculoId: vehiculo?.id,
     vehiculo: vehiculo ? `${vehiculo.nombre} · ${vehiculo.placa}` : (textoVehiculo || 'Panel'),
     estado: 'planificada' as const,
     paradas,
+    extras,
   }
   if (vehiculo) vehiculo.estado = 'en_ruta'
   estado.rutas.unshift(ruta)
@@ -976,7 +1100,16 @@ export function iniciarRuta(entrada: Estado, rutaId: string): Resultado {
     if (!orden || orden.origenInventario === 'factura') return []
     return cargaParada(orden, parada).map((item) => ({ orden, ...item }))
   })
-  const falta = faltaStock(estado, ruta.sucursalId, cargas.map((item) => ({ ...item.linea, cantidad: item.cantidad })))
+  const extras = ruta.extras ?? []
+  const falta = faltaStock(estado, ruta.sucursalId, [
+    ...cargas.map((item) => ({ ...item.linea, cantidad: item.cantidad })),
+    ...extras.map((extra) => ({
+      productoId: extra.productoId,
+      cantidad: extra.cantidad,
+      controlaInventario: true,
+      descripcion: estado.productos.find((p) => p.id === extra.productoId)?.nombre ?? 'Extra',
+    })),
+  ])
   if (falta) return { ok: false, error: falta }
   const ahora = new Date().toISOString()
   let costo = 0
@@ -992,6 +1125,20 @@ export function iniciarRuta(entrada: Estado, rutaId: string): Resultado {
     moverCarga(estado, orden, items, 'salida', ruta.codigo, 'Carga del camión', ruta.fecha)
     if (orden.lineas.every((linea) => pendienteDe(linea) <= 0.001)) orden.origenInventario = 'ruta'
     costo = redondear(costo + costoCarga(items))
+  }
+  for (const extra of extras) {
+    if (extra.cantidad <= 0) continue
+    estado.movimientos.push({
+      id: nid('mov'),
+      fecha: ruta.fecha,
+      sucursalId: ruta.sucursalId,
+      productoId: extra.productoId,
+      tipo: 'salida',
+      cantidad: extra.cantidad,
+      referencia: ruta.codigo,
+      concepto: 'Extra cargado al camión',
+    })
+    costo = redondear(costo + redondear(extra.cantidad * extra.costoUnitario))
   }
   if (costo > 0) {
     const asiento = registrarAsiento(estado, {
@@ -1024,13 +1171,65 @@ export function reportarGps(entrada: Estado, rutaId: string, lat: number, lng: n
   return { ok: true, estado }
 }
 
-function cerrarSiTermina(estado: Estado, ruta: Estado['rutas'][number]) {
+function pendienteExtra(extra: { cantidad: number; vendida: number; devuelta: number }) {
+  return redondear(extra.cantidad - extra.vendida - extra.devuelta)
+}
+
+function reintegrarPendiente(estado: Estado, ruta: Estado['rutas'][number]): string | null {
+  const sobrante = (ruta.extras ?? []).map((extra) => ({ extra, cantidad: pendienteExtra(extra) })).filter((item) => item.cantidad > 0.001)
+  if (sobrante.length === 0) return null
+  let costo = 0
+  for (const item of sobrante) {
+    estado.movimientos.push({
+      id: nid('mov'),
+      fecha: fechaGT(),
+      sucursalId: ruta.sucursalId,
+      productoId: item.extra.productoId,
+      tipo: 'entrada',
+      cantidad: item.cantidad,
+      referencia: ruta.codigo,
+      concepto: 'Reintegro del camión',
+    })
+    item.extra.devuelta = redondear(item.extra.devuelta + item.cantidad)
+    costo = redondear(costo + redondear(item.cantidad * item.extra.costoUnitario))
+  }
+  if (costo <= 0) return null
+  const asiento = registrarAsiento(estado, {
+    fecha: fechaGT(),
+    descripcion: `Reintegro ${ruta.codigo}`,
+    origen: 'devolucion_ruta',
+    origenId: ruta.id,
+    sucursalId: ruta.sucursalId,
+    lineas: [
+      { cuentaId: CTA.inventario, detalle: 'Producto que vuelve a bodega', debe: costo, haber: 0 },
+      { cuentaId: CTA.costo, detalle: 'Reversión del extra no vendido', debe: 0, haber: costo },
+    ],
+  })
+  return 'error' in asiento ? asiento.error : null
+}
+
+function cerrarSiTermina(estado: Estado, ruta: Estado['rutas'][number]): string | null {
   const abiertas = ruta.paradas.some((p) => p.estado === 'pendiente' || p.estado === 'en_camino' || p.estado === 'llegada')
-  if (abiertas) return
+  if (abiertas) return null
+  const reintegro = reintegrarPendiente(estado, ruta)
+  if (reintegro) return reintegro
   ruta.estado = 'finalizada'
   const vehiculo = estado.vehiculos.find((v) => v.id === ruta.vehiculoId)
   const otra = estado.rutas.some((otraRuta) => otraRuta.id !== ruta.id && otraRuta.vehiculoId === ruta.vehiculoId && otraRuta.estado !== 'finalizada')
   if (vehiculo && vehiculo.estado === 'en_ruta' && !otra) vehiculo.estado = 'disponible'
+  return null
+}
+
+export function reintegrarExtra(entrada: Estado, rutaId: string): Resultado {
+  const estado = clonar(entrada)
+  const ruta = estado.rutas.find((r) => r.id === rutaId)
+  if (!ruta || ruta.estado === 'planificada') return { ok: false, error: 'El extra se reintegra cuando el camión ya salió.' }
+  if (ruta.estado === 'finalizada') return { ok: false, error: 'Esa ruta ya cerró el reintegro.' }
+  const error = reintegrarPendiente(estado, ruta)
+  if (error) return { ok: false, error }
+  const queda = (ruta.extras ?? []).some((extra) => pendienteExtra(extra) > 0.001)
+  if (queda) return { ok: false, error: 'Quedó producto sin reintegrar.' }
+  return { ok: true, estado, aviso: 'El sobrante volvió a bodega.' }
 }
 
 export function marcarParada(entrada: Estado, rutaId: string, paradaId: string, accion: 'llegada' | 'entregada' | 'incidencia', motivo = ''): Resultado {
@@ -1085,7 +1284,8 @@ export function marcarParada(entrada: Estado, rutaId: string, paradaId: string, 
     siguiente.estado = 'en_camino'
     ruta.legStartedAt = new Date().toISOString()
   }
-  cerrarSiTermina(estado, ruta)
+  const cierre = cerrarSiTermina(estado, ruta)
+  if (cierre) return { ok: false, error: cierre }
   return { ok: true, estado, aviso: accion === 'entregada' ? 'Entrega registrada' : 'Incidencia registrada. La orden volvió a confirmarse.' }
 }
 
@@ -1165,17 +1365,29 @@ export interface VentaPos {
   sucursalId: string
   socioId: string
   vendedorId: string
+  rutaId?: string
+  receptorNombre?: string
+  sectorId?: string
   lineas: NuevaVenta['lineas']
 }
 
 export function registrarVentaPos(entrada: Estado, input: VentaPos): Resultado {
   const sucursal = entrada.sucursales.find((s) => s.id === input.sucursalId && s.activa)
   if (!sucursal) return { ok: false, error: 'Elegí una sucursal activa.' }
+  const ruta = input.rutaId ? entrada.rutas.find((item) => item.id === input.rutaId) : undefined
+  if (input.rutaId && (!ruta || ruta.estado !== 'en_curso' || ruta.sucursalId !== input.sucursalId)) {
+    return { ok: false, error: 'Esa ruta no está en curso en esta sucursal.' }
+  }
   for (const linea of input.lineas) {
     const producto = entrada.productos.find((p) => p.id === linea.productoId && p.activo)
     if (!producto) return { ok: false, error: 'Hay un producto que ya no está activo.' }
-    if (producto.controlaInventario && stock(entrada, input.sucursalId, producto.id) + 0.0001 < linea.cantidad) {
+    if (!ruta && producto.controlaInventario && stock(entrada, input.sucursalId, producto.id) + 0.0001 < linea.cantidad) {
       return { ok: false, error: `No hay suficiente ${producto.nombre} en ${sucursal.nombre}.` }
+    }
+    if (ruta) {
+      const extra = ruta.extras?.find((item) => item.productoId === linea.productoId)
+      const queda = extra ? pendienteExtra(extra) : 0
+      if (queda + 0.0001 < linea.cantidad) return { ok: false, error: `En el camión quedan ${queda} de ${producto.nombre}.` }
     }
   }
   const venta = crearOrdenVenta(entrada, {
@@ -1185,12 +1397,27 @@ export function registrarVentaPos(entrada: Estado, input: VentaPos): Resultado {
     direccionEntrega: sucursal.direccion,
     lat: sucursal.lat,
     lng: sucursal.lng,
-    ventana: 'Mostrador',
-    notas: 'Punto de venta',
+    ventana: ruta ? 'Ruta' : 'Mostrador',
+    notas: ruta ? `Venta en ruta ${ruta.codigo}` : 'Punto de venta',
     confirmar: true,
+    facturar: true,
+    receptorNombre: input.receptorNombre,
+    sectorId: input.sectorId || ruta?.sectorId,
     lineas: input.lineas,
   })
   if (!venta.ok || !venta.estado || !venta.id) return venta.ok ? { ok: false, error: 'No se pudo abrir la venta.' } : venta
+  if (ruta) {
+    const orden = venta.estado.ordenesVenta.find((item) => item.id === venta.id)
+    const rutaVenta = venta.estado.rutas.find((item) => item.id === ruta.id)
+    if (orden) {
+      orden.origenInventario = 'ruta'
+      for (const linea of orden.lineas) linea.despachada = linea.cantidad
+    }
+    for (const linea of input.lineas) {
+      const extra = rutaVenta?.extras?.find((item) => item.productoId === linea.productoId)
+      if (extra) extra.vendida = redondear(extra.vendida + linea.cantidad)
+    }
+  }
   const entrega = entregarEnMostrador(venta.estado, venta.id)
   if (!entrega.ok || !entrega.estado) return entrega.ok ? { ok: false, error: 'No se pudo entregar en mostrador.' } : entrega
   const factura = emitirFactura(entrega.estado, venta.id)
@@ -1294,8 +1521,41 @@ export function guardarPrecios(entrada: Estado, listaId: string, items: { produc
   return { ok: true, estado, id: lista.id, aviso: `Precios de ${lista.nombre} guardados` }
 }
 
+export function guardarSector(entrada: Estado, input: { id?: string; departamentoCodigo: string; municipioCodigo: string; sector: string; nombre: string; sucursalId: string; activo: boolean }): Resultado {
+  const estado = clonar(entrada)
+  const departamentoCodigo = input.departamentoCodigo.trim()
+  const municipioCodigo = input.municipioCodigo.trim()
+  const sector = input.sector.trim()
+  const nombre = input.nombre.trim()
+  if (!/^\d{2,5}$/.test(departamentoCodigo)) return { ok: false, error: 'El departamento usa de 2 a 5 dígitos. El ejemplo es 02001.' }
+  if (!/^\d{1,3}$/.test(municipioCodigo)) return { ok: false, error: 'El municipio usa de 1 a 3 dígitos. El ejemplo es 01.' }
+  if (!/^\d{1,2}$/.test(sector)) return { ok: false, error: 'El sector es un número. El ejemplo es 1.' }
+  if (nombre.length < 3) return { ok: false, error: 'El sector necesita un nombre.' }
+  if (!estado.sucursales.some((item) => item.id === input.sucursalId)) return { ok: false, error: 'Elegí la sucursal del sector.' }
+  const codigo = codigoSector(departamentoCodigo, municipioCodigo, sector)
+  if (!estado.sectores) estado.sectores = []
+  if (estado.sectores.some((item) => item.codigo === codigo && item.id !== input.id)) return { ok: false, error: `El código ${codigo} ya existe.` }
+  if (input.id) {
+    const actual = estado.sectores.find((item) => item.id === input.id)
+    if (!actual) return { ok: false, error: 'No encontré el sector.' }
+    actual.departamentoCodigo = departamentoCodigo
+    actual.municipioCodigo = municipioCodigo
+    actual.sector = sector
+    actual.codigo = codigo
+    actual.nombre = nombre
+    actual.sucursalId = input.sucursalId
+    actual.activo = input.activo
+    return { ok: true, estado, id: actual.id, aviso: `Sector ${codigo} actualizado` }
+  }
+  const creado: Sector = { id: nid('sec'), departamentoCodigo, municipioCodigo, sector, codigo, nombre, sucursalId: input.sucursalId, activo: input.activo }
+  estado.sectores.push(creado)
+  return { ok: true, estado, id: creado.id, aviso: `Sector ${codigo} creado` }
+}
+
 export function completarCatalogos(entrada: Estado): Estado {
   const estado = clonar(entrada)
+  if (!estado.sectores?.length) estado.sectores = sectoresIniciales()
+  if (!estado.siguienteInterno) estado.siguienteInterno = 1
   if (!estado.cuentasBancarias?.length) estado.cuentasBancarias = cuentasBancariasIniciales()
   if (!estado.pagosProveedor) estado.pagosProveedor = []
   const principal = estado.cuentasBancarias.find((cuenta) => cuenta.id === 'ban-bi') ?? estado.cuentasBancarias[0]
@@ -1320,6 +1580,18 @@ export function completarCatalogos(entrada: Estado): Estado {
   }
   for (const socio of estado.socios) {
     if (!socio.listaPrecioId) socio.listaPrecioId = socio.id === 'soc-coop' ? 'lista-mayoreo' : 'lista-general'
+    if (!socio.sectorId && !esConsumidorFinal(socio.nit)) socio.sectorId = estado.sectores.find((item) => item.sucursalId === socio.sucursalId && item.activo)?.id
+  }
+  for (const orden of estado.ordenesVenta) {
+    if (orden.facturar === undefined) orden.facturar = true
+    if (!orden.sectorId) orden.sectorId = estado.socios.find((socio) => socio.id === orden.socioId)?.sectorId
+  }
+  for (const pago of estado.pagosProveedor ?? []) {
+    if (!pago.forma) pago.forma = pago.bancoId ? 'transferencia' : 'efectivo'
+  }
+  for (const ruta of estado.rutas) {
+    if (!ruta.extras) ruta.extras = []
+    if (!ruta.sectorId) ruta.sectorId = estado.sectores.find((item) => item.sucursalId === ruta.sucursalId && item.activo)?.id
   }
   for (const ruta of estado.rutas) {
     if (ruta.vehiculoId && estado.vehiculos.some((v) => v.id === ruta.vehiculoId)) continue

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useErp } from '../datos/store'
-import { crearRuta, iniciarRuta } from '../datos/motor'
+import { crearRuta, iniciarRuta, reintegrarExtra } from '../datos/motor'
 import { folio, kilometrosRuta, ordenDespachable, pendienteLinea, posicionRepartidor, sucursalesDe } from '../datos/consultas'
 import { distanciaKm } from '../dominio/geo'
 import { fechaGT } from '../dominio/formato'
@@ -28,6 +28,8 @@ export function Rutas() {
   const [vehiculoId, setVehiculoId] = useState(() => estado.vehiculos.find((v) => v.sucursalId === sede && v.estado === 'disponible')?.id ?? '')
   const [ordenes, setOrdenes] = useState<string[]>([])
   const [cantidades, setCantidades] = useState<Record<string, number>>({})
+  const [sectorId, setSectorId] = useState(() => estado.sectores?.find((sector) => sector.sucursalId === sede && sector.activo)?.id ?? '')
+  const [extras, setExtras] = useState<{ productoId: string; cantidad: number }[]>([])
   const [salir, setSalir] = useState(true)
   useEffect(() => {
     if (sucursalActiva === 'todas') return
@@ -35,6 +37,8 @@ export function Rutas() {
     setRepartidorId('')
     setOrdenes([])
     setCantidades({})
+    setExtras([])
+    setSectorId(estado.sectores?.find((sector) => sector.sucursalId === sucursalActiva && sector.activo)?.id ?? '')
     setVehiculoId(estado.vehiculos.find((v) => v.sucursalId === sucursalActiva && v.estado === 'disponible')?.id ?? '')
   }, [sucursalActiva])
   const visibles = estado.rutas.filter((r) => enVista(r.sucursalId) && (r.fecha === fechaGT() || r.estado !== 'finalizada'))
@@ -51,13 +55,20 @@ export function Rutas() {
   const elegida = visibles.find((r) => r.id === seleccion) ?? visibles[0]
   const repartidores = estado.usuarios.filter((u) => u.activo && sucursalesDe(u).includes(sucursalId) && estado.roles.find((r) => r.id === u.rolId)?.esRepartidor)
   const flota = estado.vehiculos.filter((v) => v.sucursalId === sucursalId && v.estado === 'disponible')
-  const disponibles = estado.ordenesVenta.filter((o) => o.sucursalId === sucursalId && ordenDespachable(estado, o))
+  const sectores = (estado.sectores ?? []).filter((sector) => sector.activo && sector.sucursalId === sucursalId)
+  const disponibles = estado.ordenesVenta.filter((o) => {
+    if (o.sucursalId !== sucursalId || !ordenDespachable(estado, o)) return false
+    const sectorOrden = o.sectorId || estado.socios.find((s) => s.id === o.socioId)?.sectorId
+    return !sectorId || !sectorOrden || sectorOrden === sectorId
+  })
+  const productosExtra = estado.productos.filter((p) => p.activo && p.controlaInventario)
 
   function armar(event: React.FormEvent) {
     event.preventDefault()
     const resultado = ejecutar((actual) => {
       const creada = crearRuta(actual, {
         sucursalId,
+        sectorId,
         repartidorId,
         vehiculoId,
         ordenIds: ordenes,
@@ -68,11 +79,12 @@ export function Rutas() {
             lineas: (orden?.lineas ?? []).map((linea) => ({ lineaId: linea.id, cantidad: cantidades[linea.id] ?? pendienteLinea(linea) })),
           }
         }),
+        extras: extras.filter((extra) => extra.cantidad > 0),
       })
       if (!creada.ok || !creada.estado || !creada.id || !salir) return creada
       return iniciarRuta(creada.estado, creada.id)
     })
-    if (resultado.ok) { setDespacho(false); setOrdenes([]); setCantidades({}) }
+    if (resultado.ok) { setDespacho(false); setOrdenes([]); setCantidades({}); setExtras([]) }
   }
 
   return (
@@ -86,13 +98,27 @@ export function Rutas() {
             return (
               <button key={ruta.id} className={`w-full rounded-md bg-white p-3 text-left ${elegida?.id === ruta.id ? 'ring-2 ring-cyan-700' : ''}`} onClick={() => setSeleccion(ruta.id)}>
                 <div className="flex items-start justify-between gap-2"><strong className="min-w-0">{nombre}</strong><Badge tono={ruta.estado === 'en_curso' ? 'alerta' : ruta.estado === 'finalizada' ? 'ok' : 'neutro'}>{ruta.estado.replaceAll('_', ' ')}</Badge></div>
-                <div className="mt-1 text-xs text-slate-500">{ruta.codigo} · {ruta.vehiculo} · {hechas}/{ruta.paradas.length} · {kilometrosRuta(ruta, bodega).toFixed(1)} km{ruta.gps && ahora - Date.parse(ruta.gps.en) < 90_000 ? ' · GPS del teléfono' : ''}</div>
+                <div className="mt-1 text-xs text-slate-500">{ruta.codigo} · {estado.sectores?.find((sector) => sector.id === ruta.sectorId)?.codigo ?? 'Sin sector'} · {ruta.vehiculo} · {hechas}/{ruta.paradas.length} · {kilometrosRuta(ruta, bodega).toFixed(1)} km{ruta.gps && ahora - Date.parse(ruta.gps.en) < 90_000 ? ' · GPS del teléfono' : ''}</div>
               </button>
             )
           })}
           {elegida && (
             <Tarjeta>
               <h2 className="font-display text-xl">{elegida.codigo}</h2>
+              <p className="text-xs text-slate-500">{estado.sectores?.find((sector) => sector.id === elegida.sectorId)?.nombre ?? 'Sin sector'}</p>
+              {(elegida.extras ?? []).length > 0 && (
+                <div className="mt-2 text-sm">
+                  <div className="font-medium">Extra en el camión</div>
+                  {(elegida.extras ?? []).map((extra) => {
+                    const producto = estado.productos.find((p) => p.id === extra.productoId)
+                    const queda = extra.cantidad - extra.vendida - extra.devuelta
+                    return <div key={extra.productoId} className="text-xs text-slate-600">{producto?.nombre}: cargó {extra.cantidad}, vendió {extra.vendida}, reintegró {extra.devuelta}, queda {queda}</div>
+                  })}
+                  {puede('rutas.despachar') && elegida.estado === 'en_curso' && (elegida.extras ?? []).some((extra) => extra.cantidad - extra.vendida - extra.devuelta > 0) && (
+                    <Boton className="mt-2" variante="secundario" onClick={() => ejecutar((actual) => reintegrarExtra(actual, elegida.id))}>Reintegrar sobrante</Boton>
+                  )}
+                </div>
+              )}
               <ol className="mt-2 space-y-2 text-sm">
                 {elegida.paradas.map((p, i) => {
                   const bodega = estado.sucursales.find((s) => s.id === elegida.sucursalId)!
@@ -121,7 +147,9 @@ export function Rutas() {
               setSucursalId(id)
               setOrdenes([])
               setCantidades({})
+              setExtras([])
               setRepartidorId('')
+              setSectorId(estado.sectores?.find((sector) => sector.sucursalId === id && sector.activo)?.id ?? '')
               setVehiculoId(estado.vehiculos.find((v) => v.sucursalId === id && v.estado === 'disponible')?.id ?? '')
             }}>
               {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -133,6 +161,12 @@ export function Rutas() {
               {repartidores.map((u) => <option key={u.id} value={u.id}>{u.nombre}</option>)}
             </Lista>
           </Campo>
+          <Campo etiqueta="Sector">
+            <Lista value={sectorId} onChange={(e) => { setSectorId(e.target.value); setOrdenes([]) }} required>
+              <option value="">Elegí</option>
+              {sectores.map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
+            </Lista>
+          </Campo>
           <Campo etiqueta="Vehículo">
             <Lista value={vehiculoId} onChange={(e) => setVehiculoId(e.target.value)} required>
               <option value="">Elegí</option>
@@ -140,6 +174,18 @@ export function Rutas() {
             </Lista>
           </Campo>
           {flota.length === 0 && <p className="text-sm text-slate-500">No hay vehículos disponibles en esta sucursal.</p>}
+          <div className="space-y-2">
+            <p className="text-xs text-slate-500">Extra que sube además de los pedidos. Al salir se contabiliza. Lo que no se venda vuelve a bodega.</p>
+            {extras.map((extra, indice) => (
+              <div key={indice} className="grid grid-cols-[1fr_5rem] gap-2">
+                <Lista aria-label="Producto extra" value={extra.productoId} onChange={(e) => setExtras(extras.map((item, i) => i === indice ? { ...item, productoId: e.target.value } : item))}>
+                  {productosExtra.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                </Lista>
+                <input className="rounded border border-[#c5cdd2] bg-white px-2 py-1 text-right" aria-label="Cantidad extra" type="number" min={1} value={extra.cantidad} onChange={(e) => setExtras(extras.map((item, i) => i === indice ? { ...item, cantidad: Number(e.target.value) } : item))} />
+              </div>
+            ))}
+            <Boton type="button" variante="secundario" onClick={() => setExtras([...extras, { productoId: productosExtra[0]?.id ?? '', cantidad: 1 }])}>Agregar extra</Boton>
+          </div>
           <div className="max-h-72 space-y-2 overflow-auto">
             <p className="text-xs text-slate-500">Marcá la orden y escribí cuánto sube al camión. Lo que dejes en cero no sale y queda para otra ruta.</p>
             {disponibles.map((orden) => {

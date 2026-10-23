@@ -11,7 +11,7 @@ type Borrador = Omit<Socio, 'id' | 'codigo'> & { id?: string }
 const vacio = (sucursalId: string): Borrador => ({
   nombre: '', nombreComercial: '', nit: '', roles: ['cliente'], telefono: '', correo: '', direccion: '',
   municipio: 'Guatemala', departamento: 'Guatemala', sucursalId, lat: 14.5994, lng: -90.5138,
-  limiteCredito: 0, diasCredito: 0, estado: 'activo', listaPrecioId: 'lista-general', notas: '',
+  limiteCredito: 0, diasCredito: 0, estado: 'activo', listaPrecioId: 'lista-general', sectorId: '', notas: '',
 })
 
 export function Socios() {
@@ -51,7 +51,7 @@ export function Socios() {
         ))}
       </Tarjeta>
       <Tabla
-        columnas={['Código', 'Nombre', 'NIT', 'Roles', 'Sucursal', 'Crédito']}
+        columnas={['Código', 'Nombre', 'NIT', 'Roles', 'Sucursal', 'Sector', 'Crédito']}
         vacio="No hay socios con ese filtro."
         filas={filas.map((s) => ({
           id: s.id,
@@ -62,6 +62,7 @@ export function Socios() {
             s.nit,
             <span key="r" className="flex gap-1">{s.roles.map((r) => <Badge key={r} tono={r === 'lead' ? 'alerta' : r === 'proveedor' ? 'agua' : 'ok'}>{r}</Badge>)}</span>,
             estado.sucursales.find((x) => x.id === s.sucursalId)?.codigo,
+            estado.sectores?.find((sector) => sector.id === s.sectorId)?.codigo ?? '',
             s.diasCredito ? `${s.diasCredito} días` : 'Contado',
           ],
         }))}
@@ -72,11 +73,21 @@ export function Socios() {
             <Campo etiqueta="Razón social o nombre"><Texto value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} required /></Campo>
             <Campo etiqueta="Nombre comercial"><Texto value={form.nombreComercial} onChange={(e) => setForm({ ...form, nombreComercial: e.target.value })} /></Campo>
             <Campo etiqueta="NIT o CF"><Texto value={form.nit} onChange={(e) => setForm({ ...form, nit: e.target.value })} required /></Campo>
+            <Campo etiqueta="Sector">
+              <Lista value={form.sectorId ?? ''} onChange={(e) => {
+                const sector = estado.sectores?.find((item) => item.id === e.target.value)
+                setForm({ ...form, sectorId: e.target.value, sucursalId: sector?.sucursalId ?? form.sucursalId })
+              }}>
+                <option value="">Sin sector</option>
+                {(estado.sectores ?? []).filter((sector) => sector.activo && permitidas.includes(sector.sucursalId)).map((sector) => <option key={sector.id} value={sector.id}>{sector.codigo} · {sector.nombre}</option>)}
+              </Lista>
+            </Campo>
             <Campo etiqueta="Sucursal">
-              <Lista value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value })}>
+              <Lista value={form.sucursalId} onChange={(e) => setForm({ ...form, sucursalId: e.target.value, sectorId: '' })}>
                 {estado.sucursales.filter((s) => permitidas.includes(s.id)).map((s) => <option key={s.id} value={s.id}>{s.nombre}</option>)}
               </Lista>
             </Campo>
+            <p className="text-xs text-slate-500 sm:col-span-2">La sucursal sigue al sector. Si cambiás la sucursal, volvé a elegir el sector de esa tienda.</p>
             <div className="sm:col-span-2">
               <span className="mb-1 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-500">Roles</span>
               <div className="flex gap-2">

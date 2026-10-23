@@ -36,7 +36,8 @@ export function FacturaVista({ estado, factura, onCerrar }: { estado: Estado; fa
         <div className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
           <div>
             <div className="text-xs uppercase tracking-wide text-slate-500">Receptor</div>
-            <div className="font-medium">{socio?.nombre}</div>
+            <div className="font-medium">{factura.receptorNombre || socio?.nombre}</div>
+            {factura.interna && <div>Venta interna, sin certificación FEL</div>}
             <div>NIT {socio?.nit}</div>
             <div>{factura.lineas.length ? socio?.direccion : ''}</div>
           </div>

@@ -18,6 +18,7 @@ export const CATALOGO_OPCIONES: Opcion[] = [
   { codigo: 'facturas.ver', modulo: 'Facturación', nombre: 'Ver facturas' },
   { codigo: 'facturas.emitir', modulo: 'Facturación', nombre: 'Emitir facturas y notas de crédito' },
   { codigo: 'facturas.cobrar', modulo: 'Facturación', nombre: 'Registrar cobros' },
+  { codigo: 'analisis.ver', modulo: 'Facturación', nombre: 'Ver análisis de ventas y cuentas por cobrar' },
   { codigo: 'fel.ver', modulo: 'Facturación', nombre: 'Ver certificación FEL' },
   { codigo: 'fel.configurar', modulo: 'Facturación', nombre: 'Configurar certificador' },
   { codigo: 'inventario.ver', modulo: 'Inventario', nombre: 'Ver existencias' },

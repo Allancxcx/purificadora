@@ -39,6 +39,17 @@ export interface ConfigFel {
   endpoint: string
 }
 
+export interface Sector {
+  id: string
+  departamentoCodigo: string
+  municipioCodigo: string
+  sector: string
+  codigo: string
+  nombre: string
+  sucursalId: string
+  activo: boolean
+}
+
 export interface Sucursal {
   id: string
   codigo: string
@@ -96,6 +107,7 @@ export interface Socio {
   diasCredito: number
   estado: 'activo' | 'inactivo'
   listaPrecioId?: string
+  sectorId?: string
   notas: string
 }
 
@@ -188,6 +200,9 @@ export interface OrdenVenta {
   ventana: string
   notas: string
   listaPrecioId?: string
+  facturar: boolean
+  receptorNombre?: string
+  sectorId?: string
   lineas: LineaComercial[]
   origenInventario: OrigenInventario
 }
@@ -211,6 +226,7 @@ export interface OrdenCompra {
   fecha: string
   estado: EstadoOrdenCompra
   notas: string
+  facturaProveedor?: string
   lineas: LineaCompra[]
   asientoId?: string
 }
@@ -311,8 +327,10 @@ export interface PagoProveedor {
   sucursalId: string
   socioId: string
   ordenCompraId: string
-  bancoId: string
+  forma: FormaCobro
+  bancoId?: string
   monto: number
+  facturaProveedor?: string
   referencia: string
   asientoId: string
 }
@@ -337,6 +355,9 @@ export interface Factura {
   ultimoError?: string
   movioInventario: boolean
   ajustada: boolean
+  interna?: boolean
+  receptorNombre?: string
+  sectorId?: string
 }
 
 export interface LineaAsiento {
@@ -386,16 +407,26 @@ export interface Parada {
   entregadaEn?: string
 }
 
+export interface ExtraCamion {
+  productoId: string
+  cantidad: number
+  vendida: number
+  devuelta: number
+  costoUnitario: number
+}
+
 export interface Ruta {
   id: string
   codigo: string
   fecha: string
   sucursalId: string
+  sectorId?: string
   repartidorId: string
   vehiculoId?: string
   vehiculo: string
   estado: EstadoRuta
   paradas: Parada[]
+  extras: ExtraCamion[]
   iniciadaEn?: string
   legStartedAt?: string
   asientoCostoId?: string
@@ -407,6 +438,7 @@ export interface Estado {
   empresa: Empresa
   fel: ConfigFel
   sucursales: Sucursal[]
+  sectores: Sector[]
   roles: Rol[]
   usuarios: Usuario[]
   socios: Socio[]
@@ -426,4 +458,5 @@ export interface Estado {
   rutas: Ruta[]
   siguienteAsiento: number
   siguienteRuta: number
+  siguienteInterno: number
 }
